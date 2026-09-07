@@ -4,3 +4,7 @@ scikit-learn
 shap
 fastapi
 uvicorn
+
+sqlalchemy
+openai
+python-dotenv
