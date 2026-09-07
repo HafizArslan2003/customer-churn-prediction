@@ -10,9 +10,11 @@ Predict which SaaS customers are likely to cancel their subscription in the next
 
 ## Setup Instructions
 
-1. **Install Dependencies**
-   It's recommended to use a virtual environment:
+1. **Install Dependencies (Virtual Environment Recommended)**
    ```bash
+   # Windows (PowerShell)
+   python -m venv venv
+   .\venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    ```
 
@@ -39,12 +41,16 @@ Predict which SaaS customers are likely to cancel their subscription in the next
 
 ## Testing the API
 
-Once the server is running, you can test the `/predict` endpoint using `curl`:
+Once the server is running, you can test the `/predict` endpoint.
 
+**Using curl:**
 ```bash
-curl -X POST "http://127.0.0.1:8000/predict" \
-     -H "Content-Type: application/json" \
-     -d '{"login_frequency": 2.0, "feature_usage_count": 3.0, "support_ticket_volume": 5.0, "payment_amount": 100.0, "account_age": 30.0}'
+curl -X POST "http://127.0.0.1:8000/predict" -H "Content-Type: application/json" -d '{"login_frequency": 2.0, "feature_usage_count": 1.0, "support_ticket_volume": 3.0, "payment_amount": 95.0, "account_age": 150.0}'
+```
+
+**Using PowerShell:**
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/predict" -Method Post -ContentType "application/json" -Body '{"login_frequency": 2.0, "feature_usage_count": 1.0, "support_ticket_volume": 3.0, "payment_amount": 95.0, "account_age": 150.0}'
 ```
 
 ### Expected Output
