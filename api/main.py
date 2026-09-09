@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import json
+from functools import lru_cache
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,9 +11,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import shap
 
-from . import models, schemas
-from .database import engine, get_db
-from .schemas import CustomerData, PredictionResponse
+# Support both supported ways of starting the server:
+#   project root -> uvicorn api.main:app --reload
+#   api folder    -> uvicorn main:app --reload
+try:
+    from . import models, schemas
+    from .database import engine, get_db
+    from .schemas import CustomerData, PredictionResponse
+except ImportError:
+    import models
+    import schemas
+    from database import engine, get_db
+    from schemas import CustomerData, PredictionResponse
 
 # Create DB tables
 models.Base.metadata.create_all(bind=engine)
@@ -29,6 +39,32 @@ app.add_middleware(
 )
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "../model")
+DATASET_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/customers.csv"))
+
+
+@lru_cache(maxsize=1)
+def get_dataset_profile():
+    """Return a small, privacy-safe aggregate profile for the AI assistant."""
+    if not os.path.exists(DATASET_PATH):
+        return {"available": False, "message": "The processed customers dataset was not found."}
+
+    data = pd.read_csv(DATASET_PATH)
+    numeric_columns = data.select_dtypes(include=[np.number]).columns.tolist()
+    profile = {
+        "available": True,
+        "source": "data/customers.csv",
+        "rows": int(len(data)),
+        "columns": data.columns.tolist(),
+        "missing_values": {column: int(count) for column, count in data.isna().sum().items() if count},
+        "feature_averages": {column: round(float(data[column].mean()), 2) for column in numeric_columns},
+    }
+    if "churned" in data.columns:
+        profile["churn_rate_percent"] = round(float(data["churned"].mean() * 100), 2)
+        profile["segment_averages"] = {
+            "retained": {column: round(float(value), 2) for column, value in data[data["churned"] == 0][numeric_columns].mean().items()},
+            "churned": {column: round(float(value), 2) for column, value in data[data["churned"] == 1][numeric_columns].mean().items()},
+        }
+    return profile
 
 try:
     with open(os.path.join(MODEL_DIR, "model.pkl"), "rb") as f:
@@ -179,6 +215,12 @@ def get_reports_summary(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/dataset/summary")
+def dataset_summary():
+    """Expose the same safe dataset profile used by Churn AI."""
+    return get_dataset_profile()
+
+
 @app.post("/chat")
 async def chat(request: dict, db: Session = Depends(get_db)):
     question = request.get("question", "")
@@ -190,6 +232,7 @@ async def chat(request: dict, db: Session = Depends(get_db)):
     high_risk = db.query(models.Prediction).filter(models.Prediction.prediction == 1).count()
     avg_prob_row = db.query(func.avg(models.Prediction.churn_probability)).scalar()
     avg_prob = round(avg_prob_row * 100, 1) if avg_prob_row else 0
+    dataset_profile = get_dataset_profile()
 
     system_prompt = f"""You are ChurnBot — an AI assistant embedded inside a SaaS Churn Prediction Dashboard.
 
@@ -205,7 +248,16 @@ Current Database Stats:
 - High-risk customers: {high_risk} ({round(high_risk/total*100, 1) if total else 0}%)
 - Average churn probability: {avg_prob}%
 
+Dataset Profile (aggregated data only):
+{json.dumps(dataset_profile)}
+
+When asked to analyse the dataset, use the dataset profile above. Explain patterns using the provided aggregates, state the metric values you rely on, and do not claim access to individual customer records or invent values.
+
 Your personality: Reply casually in a natural mix of Roman Urdu + English (Hinglish/Urdu-English code-switching). Be helpful, friendly, and concise. Do NOT use bullet points for every response — talk naturally. Only use bullet points when listing things explicitly."""
+
+    # This final instruction is appended last so it takes priority over any
+    # earlier conversational style guidance in the prompt.
+    system_prompt += "\n\nMandatory language rule: Respond only in English. Do not use Urdu, Roman Urdu, Hinglish, or mixed-language replies."
 
     try:
         from openai import OpenAI
@@ -220,7 +272,9 @@ Your personality: Reply casually in a natural mix of Roman Urdu + English (Hingl
             api_key=api_key
         )
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            # Llama 3.1 8B was retired for free/developer Groq accounts.
+            # Keep this configurable, while using Groq's recommended replacement.
+            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question}
@@ -230,4 +284,4 @@ Your personality: Reply casually in a natural mix of Roman Urdu + English (Hingl
         return {"response": response.choices[0].message.content}
 
     except Exception as e:
-        return {"response": f"Oops, kuch error aa gaya: {str(e)}"}
+        return {"response": f"The AI assistant could not complete the request: {str(e)}"}

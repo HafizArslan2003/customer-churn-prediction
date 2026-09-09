@@ -1,77 +1,67 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
-import { Mic, Send, PieChart as PieChartIcon, FileText, Plus, Minus } from 'lucide-react';
+
+import { FormEvent, useState } from 'react';
+import { Mic, Send, PieChart as PieChartIcon, FileText, Plus, Minus, Sparkles } from 'lucide-react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
 
 export default function AIPanel() {
   const [input, setInput] = useState('');
+  const [reply, setReply] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  function speak(text: string) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  async function askAssistant(event: FormEvent) {
+    event.preventDefault();
+    const question = input.trim();
+    if (!question || loading) return;
+    setLoading(true); setReply('');
+    try {
+      const response = await fetch(`${API_URL}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+      const payload = await response.json();
+      const message = payload.response ?? payload.detail ?? 'Assistant abhi response nahi de saka.';
+      setReply(message);
+      speak(message);
+    } catch {
+      const message = 'The backend could not be reached. Start the FastAPI server on port 8000 and try again.';
+      setReply(message);
+      speak(message);
+    }
+    finally { setLoading(false); setInput(''); }
+  }
 
   return (
-    <div className="bg-[#101312] rounded-[32px] p-6 flex flex-col h-[740px] shadow-[0_20px_40px_rgba(0,0,0,0.1)] relative overflow-hidden">
-      
-      {/* Background Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-[#BAF91A]/10 blur-[60px] rounded-full pointer-events-none"></div>
-
-      {/* Header */}
-      <div className="flex justify-between items-center mb-10 z-10">
-        <button className="w-8 h-8 rounded-full bg-white/[0.05] border border-white/[0.05] flex items-center justify-center text-gray-400 hover:text-white transition"><Minus size={16} /></button>
-        <span className="font-medium text-white text-[15px] tracking-wide">Bostic AI</span>
-        <button className="w-8 h-8 rounded-full bg-white/[0.05] border border-white/[0.05] flex items-center justify-center text-gray-400 hover:text-white transition"><Plus size={16} /></button>
+    <section className="relative flex h-[560px] flex-col overflow-hidden rounded-[26px] bg-[#0b100e] p-5 shadow-[0_16px_30px_rgba(0,0,0,0.14)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_43%,rgba(151,255,0,.13),transparent_30%),radial-gradient(circle_at_20%_0%,rgba(255,255,255,.06),transparent_33%)]" />
+      <div className="relative z-10 mb-2 flex items-center justify-between">
+        <button aria-label="Minimize assistant" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/[.04] text-slate-300"><Minus size={16} /></button>
+        <span className="flex items-center gap-1.5 text-[15px] font-semibold text-white"><Sparkles size={15} className="text-[#baff1a]" /> Churn AI</span>
+        <button aria-label="New chat" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/[.04] text-slate-300"><Plus size={16} /></button>
       </div>
-
-      {/* Orb Container */}
-      <div className="flex-1 flex flex-col items-center justify-center z-10 mb-8">
-        
-        {/* 3D Orb */}
-        <div className="relative mb-10" style={{ width: 190, height: 190 }}>
-          {/* Main Sphere */}
-          <div className="absolute inset-0 rounded-full" style={{
-            background: 'radial-gradient(circle at 35% 25%, #E2FF99 0%, #BAF91A 30%, #10b981 60%, #064e3b 90%)',
-            boxShadow: '0 10px 40px rgba(186,249,26,0.3), inset -15px -15px 30px rgba(0,0,0,0.5), inset 15px 15px 20px rgba(255,255,255,0.4)'
-          }}></div>
-          {/* Cyan Highlight / Reflection */}
-          <div className="absolute inset-0 rounded-full opacity-60 mix-blend-screen" style={{
-            background: 'radial-gradient(ellipse at 75% 75%, #06b6d4 0%, transparent 50%)'
-          }}></div>
-          {/* White Gloss */}
-          <div className="absolute top-2 left-4 w-[140px] h-[70px] rounded-[50%] opacity-30 transform -rotate-12" style={{
-            background: 'linear-gradient(180deg, white, transparent)'
-          }}></div>
-          
-          {/* Floating Particles */}
-          <div className="absolute top-4 left-0 w-1.5 h-1.5 bg-[#BAF91A] rounded-full blur-[1px]"></div>
-          <div className="absolute bottom-8 right-0 w-2 h-2 bg-[#06b6d4] rounded-full blur-[1px]"></div>
-          <div className="absolute top-1/2 -right-4 w-1.5 h-1.5 bg-white rounded-full blur-[1px]"></div>
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
+        <div className="ai-orb-scene mb-4" aria-label="Animated AI orb">
+          <div className="ai-orb-halo" /><div className="ai-orb-ring ai-orb-ring-one" /><div className="ai-orb-ring ai-orb-ring-two" />
+          <div className="ai-orb-core"><div className="ai-orb-wave" /><div className="ai-orb-gloss" /></div>
+          <i className="ai-orb-particle particle-one" /><i className="ai-orb-particle particle-two" /><i className="ai-orb-particle particle-three" />
         </div>
-
-        <p className="text-gray-300 text-[15px] text-center font-medium">How can I assist you today?</p>
+        <p className="max-w-[260px] text-center text-[14px] font-medium text-slate-200">{loading ? 'Thinking through your customer data…' : reply || 'Ask about churn risk, customer trends, or next actions.'}</p>
       </div>
-
-      {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-3 mb-5 z-10">
-        <button className="bg-white/[0.03] border border-white/[0.08] rounded-2xl py-4 px-3 flex flex-col items-center justify-center gap-3 hover:bg-white/[0.06] transition shadow-sm">
-          <PieChartIcon size={20} className="text-[#BAF91A]" />
-          <span className="text-white text-[13px] font-medium">Pro Analysis</span>
-        </button>
-        <button className="bg-white/[0.03] border border-white/[0.08] rounded-2xl py-4 px-3 flex flex-col items-center justify-center gap-3 hover:bg-white/[0.06] transition shadow-sm">
-          <FileText size={20} className="text-[#BAF91A]" />
-          <span className="text-white text-[13px] font-medium">Report</span>
-        </button>
+      <div className="relative z-10 mb-4 grid grid-cols-2 gap-3">
+        <a href="/assessment" className="flex min-h-[78px] flex-col items-center justify-center gap-2 rounded-2xl border border-white/[.12] bg-white/[.035] text-white transition hover:bg-white/[.08]"><PieChartIcon size={20} className="text-[#baff1a]" /><span className="text-[13px] font-semibold">Assessment</span></a>
+        <a href="/reports" className="flex min-h-[78px] flex-col items-center justify-center gap-2 rounded-2xl border border-white/[.12] bg-white/[.035] text-white transition hover:bg-white/[.08]"><FileText size={20} className="text-[#baff1a]" /><span className="text-[13px] font-semibold">Reports</span></a>
       </div>
-
-      {/* Input */}
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-full p-1.5 flex items-center z-10 mt-auto">
-        <input 
-          type="text" 
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="Ask anything..." 
-          className="bg-transparent border-none outline-none text-[13px] text-white px-4 flex-1 placeholder-gray-500 font-medium"
-        />
-        <button className="p-2.5 text-white hover:text-[#BAF91A] transition"><Send size={16} /></button>
-        <button className="p-2.5 rounded-full transition ml-1 bg-white/[0.08] text-white hover:bg-white/[0.15]">
-          <Mic size={16} />
-        </button>
-      </div>
-    </div>
+      <form onSubmit={askAssistant} className="relative z-10 flex items-center rounded-full border border-white/[.13] bg-white/[.055] p-1.5">
+        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask anything…" className="min-w-0 flex-1 bg-transparent px-3 text-[13px] font-medium text-white outline-none placeholder:text-slate-500" />
+        <button type="submit" aria-label="Send question" className="rounded-full p-2.5 text-[#e9ffad] transition hover:bg-white/10 disabled:opacity-50" disabled={loading}><Send size={17} /></button><button type="button" aria-label="Voice input" className="rounded-full bg-white/[.1] p-2.5 text-white"><Mic size={16} /></button>
+      </form>
+    </section>
   );
 }

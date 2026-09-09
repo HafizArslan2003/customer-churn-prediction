@@ -1,7 +1,10 @@
 from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
-from .database import Base
+try:
+    from .database import Base
+except ImportError:
+    from database import Base
 
 class Customer(Base):
     __tablename__ = "customers"

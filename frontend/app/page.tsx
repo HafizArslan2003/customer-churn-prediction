@@ -1,5 +1,5 @@
 'use client';
-import { Search, Moon, Sun, Bell, Filter, Calendar, SlidersHorizontal, DollarSign, TrendingUp, Users, ChevronDown, Info } from 'lucide-react';
+import { Search, Moon, Sun, Bell, Calendar, SlidersHorizontal, DollarSign, TrendingUp, Users, ChevronDown, Info, PieChart as PieChartIcon, BarChart2 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import AIPanel from '@/components/AIPanel';
 
@@ -18,16 +18,16 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-8 max-w-[1440px] mx-auto min-h-screen">
+    <div className="min-h-full w-full px-6 pb-8 pt-0 xl:px-8">
       {/* ─── Top Bar (Full Width) ─── */}
-      <header className="flex justify-between items-center mb-10 w-full">
+      <header className="-mx-6 mb-7 flex w-[calc(100%+48px)] items-center justify-between gap-5 border-b border-[#e7e9ee] bg-white px-6 py-5 shadow-[0_3px_14px_rgba(20,24,36,0.025)] xl:-mx-8 xl:w-[calc(100%+64px)] xl:px-8">
         {/* Search Bar */}
-        <div className="relative w-[480px]">
+        <div className="relative w-[min(620px,48vw)] max-w-full">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
+          <input
             type="text" 
             placeholder="Search" 
-            className="w-full pl-14 pr-20 py-3.5 bg-white rounded-full text-[15px] font-medium text-gray-700 border-none outline-none shadow-[0_2px_15px_rgba(0,0,0,0.03)]"
+            className="w-full rounded-full border border-[#e7e9ee] bg-white py-3 pl-12 pr-28 text-[15px] font-medium text-gray-700 outline-none shadow-[0_2px_15px_rgba(0,0,0,0.02)]"
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-[#BAF91A]/20 text-[#101312] text-[12px] px-3 py-1.5 rounded-full font-bold flex items-center gap-1">
             ⌘ <span className="font-semibold">+ Space</span>
@@ -35,16 +35,16 @@ export default function Dashboard() {
         </div>
 
         {/* Right side icons & profile */}
-        <div className="flex items-center gap-5">
-          <div className="flex bg-white rounded-full p-1 shadow-[0_2px_15px_rgba(0,0,0,0.03)]">
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-full border border-[#e7e9ee] bg-white p-1 shadow-[0_2px_15px_rgba(0,0,0,0.02)]">
             <button className="p-2.5 rounded-full text-gray-400 hover:bg-gray-50 transition"><Moon size={18} /></button>
             <button className="p-2.5 rounded-full bg-[#BAF91A] shadow-sm"><Sun size={18} className="text-[#101312]"/></button>
           </div>
-          <button className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-[0_2px_15px_rgba(0,0,0,0.03)] relative hover:bg-gray-50 transition">
+          <button className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[#e7e9ee] bg-white shadow-[0_2px_15px_rgba(0,0,0,0.02)] transition hover:bg-gray-50">
             <Bell size={20} className="text-[#101312]" />
             <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-[#101312] rounded-full border-2 border-white"></span>
           </button>
-          <div className="flex items-center gap-3 bg-white pl-1.5 pr-4 py-1.5 rounded-full cursor-pointer shadow-[0_2px_15px_rgba(0,0,0,0.03)] hover:bg-gray-50 transition">
+          <div className="flex cursor-pointer items-center gap-3 rounded-full border border-[#e7e9ee] bg-white py-1.5 pl-1.5 pr-3 shadow-[0_2px_15px_rgba(0,0,0,0.02)] transition hover:bg-gray-50">
             <img src="https://i.pravatar.cc/150?u=ryan" alt="Ryan Foster" className="w-10 h-10 rounded-full object-cover" />
             <div className="pr-2">
               <p className="text-[14px] font-bold text-[#101312] leading-tight">Ryan Foster</p>
@@ -56,32 +56,32 @@ export default function Dashboard() {
       </header>
 
       {/* ─── Content Area (2 Columns) ─── */}
-      <div className="flex gap-8 items-start">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
         
         {/* Left Column */}
         <div className="flex-1 min-w-0">
           
           {/* Title Row */}
-          <div className="flex justify-between items-center mb-8 mt-2">
-            <h1 className="text-[40px] font-bold tracking-tight text-[#101312]">Your Analytical Board</h1>
+          <div className="mt-1 mb-4 flex items-center justify-between gap-4">
+            <h1 className="text-[40px] font-bold leading-none tracking-[-0.06em] text-[#101312]">Your Analytical Board</h1>
             <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 bg-white px-5 py-3 rounded-full text-[14px] font-semibold text-[#101312] shadow-[0_2px_15px_rgba(0,0,0,0.03)] hover:bg-gray-50 transition">
+              <button className="flex items-center gap-2 rounded-2xl border border-[#e7e9ee] bg-white px-5 py-3 text-[14px] font-semibold text-[#101312] shadow-[0_2px_15px_rgba(0,0,0,0.02)] transition hover:bg-gray-50">
                 <Calendar size={18} /> Select Date
               </button>
-              <button className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-[0_2px_15px_rgba(0,0,0,0.03)] hover:bg-gray-50 transition">
+              <button className="flex h-12 w-12 items-center justify-center rounded-full border border-[#e7e9ee] bg-white shadow-[0_2px_15px_rgba(0,0,0,0.02)] transition hover:bg-gray-50">
                 <SlidersHorizontal size={18} className="text-[#101312]" />
               </button>
             </div>
           </div>
 
           {/* Smart Sales Distribution Card */}
-          <div className="card-dark p-8 rounded-[32px] mb-6 shadow-[0_20px_40px_rgba(0,0,0,0.1)]">
-            <div className="mb-8">
+          <div className="card-dark mb-4 rounded-[24px] p-6 shadow-[0_16px_30px_rgba(0,0,0,0.1)]">
+            <div className="mb-6">
               <h2 className="text-[22px] font-semibold text-white mb-2">Smart Sales Distribution</h2>
               <p className="text-[14px] text-gray-400 font-medium">AI-enhanced sales metrics showing growth in leads, revenue, and overall performance.</p>
             </div>
-            <div className="grid grid-cols-3 gap-5">
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-[24px] p-6 backdrop-blur-md relative overflow-hidden">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="relative overflow-hidden rounded-2xl border border-white/[0.16] bg-white/[0.04] p-5 backdrop-blur-md">
                 <div className="flex items-center gap-3 text-white text-[14px] font-medium mb-5">
                   <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                     <DollarSign size={16} className="text-gray-300" />
@@ -91,7 +91,7 @@ export default function Dashboard() {
                 <div className="text-[38px] font-semibold text-white leading-none tracking-tight">56,000.00 <span className="text-[24px] text-gray-400 font-medium">$</span></div>
               </div>
               
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-[24px] p-6 backdrop-blur-md relative overflow-hidden">
+              <div className="relative overflow-hidden rounded-2xl border border-white/[0.16] bg-white/[0.04] p-5 backdrop-blur-md">
                 <div className="flex items-center gap-3 text-white text-[14px] font-medium mb-5">
                   <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                     <TrendingUp size={16} className="text-gray-300" />
@@ -101,7 +101,7 @@ export default function Dashboard() {
                 <div className="text-[38px] font-semibold text-white leading-none tracking-tight">+312 <span className="text-[24px] text-gray-400 font-medium">%</span></div>
               </div>
 
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-[24px] p-6 backdrop-blur-md relative overflow-hidden">
+              <div className="relative overflow-hidden rounded-2xl border border-white/[0.16] bg-white/[0.04] p-5 backdrop-blur-md">
                 <div className="flex items-center gap-3 text-white text-[14px] font-medium mb-5">
                   <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
                     <Users size={16} className="text-gray-300" />
@@ -114,10 +114,10 @@ export default function Dashboard() {
           </div>
 
           {/* Charts Row */}
-          <div className="grid grid-cols-2 gap-6 mb-6 h-[320px]">
+          <div className="mb-4 grid h-[286px] grid-cols-2 gap-3">
             {/* Sales Analysis Card */}
-            <div className="bg-white rounded-[32px] p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 flex flex-col relative">
-              <div className="flex justify-between items-center mb-6">
+            <div className="relative flex flex-col rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.025)]">
+              <div className="mb-3 flex items-center justify-between">
                 <h3 className="text-[17px] font-bold flex items-center gap-3 text-[#101312]">
                   <div className="w-7 h-7 rounded-full bg-[#BAF91A]/20 flex items-center justify-center">
                     <PieChartIcon size={14} className="text-[#101312]" />
@@ -129,8 +129,8 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-8 flex-1">
-                <div className="relative" style={{ width: 190, height: 190 }}>
+              <div className="flex flex-1 items-center gap-3">
+                <div className="relative shrink-0" style={{ width: 178, height: 178 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={pieData} innerRadius={60} outerRadius={85} paddingAngle={4} dataKey="value" stroke="none" cornerRadius={4}>
@@ -182,8 +182,8 @@ export default function Dashboard() {
             </div>
 
             {/* Deal Analysis Card */}
-            <div className="bg-[#E2FF99] rounded-[32px] p-8 flex flex-col relative overflow-hidden">
-              <div className="flex justify-between items-center mb-6 z-10">
+            <div className="relative flex flex-col overflow-hidden rounded-2xl bg-[#e2ff99] p-4">
+              <div className="z-10 mb-3 flex items-center justify-between">
                 <h3 className="text-[17px] font-bold flex items-center gap-3 text-[#101312]">
                   <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center">
                     <BarChart2 size={14} className="text-[#101312]" />
@@ -221,8 +221,8 @@ export default function Dashboard() {
           </div>
 
           {/* Table: Top Opportunities */}
-          <div className="bg-white rounded-[32px] p-8 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100">
-            <div className="flex justify-between items-center mb-8">
+          <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.025)] xl:w-[calc(100%+406px)]">
+            <div className="mb-4 flex items-center justify-between">
               <h3 className="text-[18px] font-bold flex items-center gap-3 text-[#101312]">
                 <div className="w-7 h-7 rounded-full bg-[#BAF91A]/20 flex items-center justify-center">
                   <span className="w-3.5 h-3.5 border-t-2 border-l-2 border-[#101312] rounded-sm transform rotate-45"></span>
@@ -281,7 +281,7 @@ export default function Dashboard() {
         </div>
 
         {/* Right Column (AI Panel) */}
-        <div className="w-[380px] shrink-0 mt-[80px]">
+        <div className="mt-[64px] w-full xl:w-[390px]">
           <AIPanel />
         </div>
       </div>

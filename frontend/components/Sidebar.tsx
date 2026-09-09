@@ -1,57 +1,42 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, PieChart, TrendingUp, Megaphone, Clock, FileText, BarChart2, Settings, HelpCircle, LogOut } from 'lucide-react';
+import { Home, BarChart2, Settings, HelpCircle, LogOut, ClipboardCheck, Users } from 'lucide-react';
 
 export default function Sidebar() {
   const pathname = usePathname();
   
+  const navItem = (href: string, label: string, Icon: typeof Home) => (
+    <Link href={href} className={`flex items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-medium transition-all ${pathname === href ? 'bg-gradient-to-b from-[#1a1f1a] to-[#0a0c0b] font-semibold text-white shadow-[0_4px_15px_rgba(0,0,0,0.1),inset_0_-15px_20px_-10px_rgba(186,249,26,0.3)]' : 'text-gray-500 hover:bg-gray-50'}`}>
+      <Icon size={18} className={pathname === href ? 'text-[#BAF91A]' : ''} />
+      {label}
+    </Link>
+  );
+
   return (
-    <aside className="w-64 min-h-screen bg-white flex flex-col pt-8 pb-8 px-6 border-r border-gray-100">
+    <aside className="flex min-h-full w-[254px] shrink-0 flex-col border-r border-[#e7e9ee] bg-white px-5 py-7 shadow-[8px_0_24px_rgba(30,35,50,0.025)] max-[900px]:hidden">
       {/* Logo */}
-      <div className="flex items-center gap-3 mb-10 pl-2">
-        <div className="w-8 h-8 rounded-full bg-[#101312] flex items-center justify-center">
+      <div className="mb-7 flex items-center gap-3 border-b border-[#eef0f3] pb-7 pl-0.5">
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#101312]">
           <div className="w-3 h-3 bg-[#BAF91A] rounded-sm transform rotate-45"></div>
         </div>
-        <span className="font-bold text-[22px] tracking-tight text-[#101312]">InsightOS</span>
+        <span className="text-[27px] font-bold tracking-[-0.06em] text-[#101312]">InsightOS</span>
       </div>
       
-      <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider mb-4 pl-3">Main</p>
+      <p className="mb-2 pl-1 text-[14px] font-medium text-slate-500">Main</p>
       
-      <nav className="flex flex-col mb-10 space-y-1">
-        <Link href="/" className={`flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-semibold transition-all ${pathname === '/' ? 'bg-gradient-to-b from-[#1a1f1a] to-[#0a0c0b] text-white shadow-[0_4px_15px_rgba(0,0,0,0.1),inset_0_-15px_20px_-10px_rgba(186,249,26,0.3)]' : 'text-gray-500 hover:bg-gray-50'}`}>
-          <Home size={18} className={pathname === '/' ? 'text-[#BAF91A]' : ''} />
-          Dashboard
-        </Link>
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <PieChart size={18} /> Analytics
-        </Link>
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <TrendingUp size={18} /> Sales Performance
-        </Link>
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <Megaphone size={18} /> Campaigns
-        </Link>
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <Clock size={18} /> Timelines
-        </Link>
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <FileText size={18} /> Contracts
-        </Link>
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <BarChart2 size={18} /> Reports
-        </Link>
+      <nav className="mb-6 flex flex-col space-y-0.5 border-b border-[#eef0f3] pb-6">
+        {navItem('/', 'Dashboard', Home)}
+        {navItem('/assessment', 'Risk Assessment', ClipboardCheck)}
+        {navItem('/reports', 'Analytics & Reports', BarChart2)}
+        {navItem('/customers', 'Customers', Users)}
       </nav>
 
-      <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider mb-4 pl-3">Other</p>
+      <p className="mb-2 pl-1 text-[14px] font-medium text-slate-500">Other</p>
       
       <nav className="flex flex-col space-y-1">
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <Settings size={18} /> Settings
-        </Link>
-        <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-[16px] text-[14px] font-medium text-gray-500 hover:bg-gray-50 transition-all">
-          <HelpCircle size={18} /> Help
-        </Link>
+        {navItem('/settings', 'Settings', Settings)}
+        {navItem('/help', 'Help', HelpCircle)}
       </nav>
 
       <div className="mt-auto">

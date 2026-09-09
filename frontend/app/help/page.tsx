@@ -1,0 +1,5 @@
+import Link from 'next/link';
+
+export default function HelpPage() {
+  return <main className="mx-auto max-w-[900px] px-6 py-10 xl:px-10"><p className="text-sm font-semibold text-[#6d8d00]">GETTING STARTED</p><h1 className="mt-2 text-4xl font-bold tracking-[-.05em]">How to use ChurnIQ</h1><div className="mt-8 space-y-4">{[['1', 'Start the backend', 'Run uvicorn api.main:app --reload from the project root.'], ['2', 'Assess a customer', 'Open Risk Assessment, provide activity metrics, and run the model.'], ['3', 'Review insights', 'Saved predictions appear in Customers and aggregate trends are available in Analytics & Reports.']].map(([number, title, copy]) => <section key={number} className="flex gap-5 rounded-[20px] border border-slate-200 bg-white p-5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#dfff91] font-bold">{number}</span><div><h2 className="font-bold">{title}</h2><p className="mt-1 text-sm text-slate-500">{copy}</p></div></section>)}</div><Link href="/assessment" className="mt-7 inline-flex rounded-xl bg-[#101312] px-5 py-3 font-bold text-white">Open assessment</Link></main>;
+}

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Activity } from 'lucide-react';
 
 const DEFAULTS = {
@@ -24,13 +24,12 @@ interface PredictionResult {
   top_reasons: string[];
 }
 
-let debounceTimer: ReturnType<typeof setTimeout>;
-
 export default function PredictorPage() {
   const [values, setValues] = useState(DEFAULTS);
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const runPrediction = useCallback(async (vals: typeof DEFAULTS, name: string) => {
     setLoading(true);
@@ -52,8 +51,8 @@ export default function PredictorPage() {
   const handleChange = (key: keyof typeof DEFAULTS, val: number) => {
     const newValues = { ...values, [key]: val };
     setValues(newValues);
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => runPrediction(newValues, customerName), 300);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => runPrediction(newValues, customerName), 300);
   };
 
   const prob = result ? Math.round(result.churn_probability * 100) : null;

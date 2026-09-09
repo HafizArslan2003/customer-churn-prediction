@@ -67,7 +67,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div>
+    <div className="mx-auto max-w-[1180px] px-6 py-10 xl:px-10">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">Reports & Analytics</h1>
         <p className="text-[var(--text-secondary)] text-sm mt-1">
@@ -105,7 +105,7 @@ export default function ReportsPage() {
                   cy="50%"
                   outerRadius={80}
                   innerRadius={40}
-                  label={(props: any) => `${props.name} ${((props.percent ?? 0) * 100).toFixed(0)}%`}
+                  label={(props: { name?: string; percent?: number }) => `${props.name ?? ''} ${((props.percent ?? 0) * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
                   {pieData.map((_, index) => (
@@ -146,7 +146,7 @@ export default function ReportsPage() {
                 />
                 <Tooltip
                   contentStyle={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '8px', color: 'var(--text-primary)' }}
-                  formatter={(val: any) => [`${(Number(val) * 100).toFixed(1)}%`, 'Avg Churn Prob']}
+                  formatter={(val) => [`${(Number(val) * 100).toFixed(1)}%`, 'Avg Churn Prob']}
                 />
                 <Line
                   type="monotone"

@@ -1,0 +1,5 @@
+import { Database, Server } from 'lucide-react';
+
+export default function SettingsPage() {
+  return <main className="mx-auto max-w-[980px] px-6 py-10 xl:px-10"><p className="text-sm font-semibold text-[#6d8d00]">WORKSPACE</p><h1 className="mt-2 text-4xl font-bold tracking-[-.05em]">Settings</h1><div className="mt-8 grid gap-5 md:grid-cols-2"><section className="rounded-[24px] border border-slate-200 bg-white p-6"><Server className="text-[#8cba00]" /><h2 className="mt-5 text-lg font-bold">Model connection</h2><p className="mt-2 text-sm leading-6 text-slate-500">The frontend uses <code className="rounded bg-slate-100 px-1">NEXT_PUBLIC_API_URL</code>, falling back to <code className="rounded bg-slate-100 px-1">http://127.0.0.1:8000</code>.</p></section><section className="rounded-[24px] border border-slate-200 bg-white p-6"><Database className="text-[#8cba00]" /><h2 className="mt-5 text-lg font-bold">Assessment history</h2><p className="mt-2 text-sm leading-6 text-slate-500">Every completed assessment is saved by the FastAPI backend and is available in Customers and Analytics.</p></section></div></main>;
+}
