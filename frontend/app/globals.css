@@ -86,6 +86,7 @@ body {
   .landscape-card { width: 100%; }
 }
 .landscape-legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 8px; color: #778076; font: 11px Arial, sans-serif; }.landscape-legend span { display: inline-flex; align-items: center; gap: 6px; }.landscape-legend .legend-dot { display: inline-block; width: 7px; height: 7px; }
+.chart-depth-card { position: relative; overflow: hidden; isolation: isolate; }.chart-depth-card::before { position: absolute; inset: -35% -15% auto; z-index: -1; height: 190px; background: radial-gradient(ellipse, rgba(196,243,74,.12), transparent 68%); content: ''; pointer-events: none; }.chart-depth-card::after { position: absolute; right: -70px; bottom: -90px; z-index: -1; width: 220px; height: 220px; border: 1px solid rgba(125,159,34,.12); border-radius: 50%; box-shadow: 0 0 0 18px rgba(125,159,34,.025), 0 0 0 36px rgba(125,159,34,.018); content: ''; pointer-events: none; }.compact-donut { filter: drop-shadow(0 10px 15px rgba(80,110,20,.14)); }.trend-card .recharts-wrapper { filter: drop-shadow(0 8px 8px rgba(80,110,20,.12)); }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 5px; }
