@@ -304,11 +304,21 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 
     summary = get_reports_summary(db)
     tool_data = {"reports_summary": summary, "model_info": get_model_metadata()}
-    if any(term in lowered for term in ["show", "list", "find", "customer"]):
-        search = ""
-        words = question.split()
-        if "find" in lowered and len(words) > 1:
-            search = words[-1]
+    named_customer = next((candidate for candidate in db.query(models.Customer).all() if candidate.name and candidate.name.lower() in lowered), None)
+    customer_intent = any(term in lowered for term in ["show", "list", "find", "search", "look up", "customer"]) or named_customer is not None
+    search = ""
+    if customer_intent:
+        if "find" in lowered:
+            search = question[lowered.index("find") + len("find"):].strip(" .?!")
+        elif "search" in lowered:
+            search = question[lowered.index("search") + len("search"):].strip(" .?!")
+        elif "look up" in lowered:
+            search = question[lowered.index("look up") + len("look up"):].strip(" .?!")
+        numeric_ids = [word.strip(".,?!") for word in question.split() if word.strip(".,?!").isdigit()]
+        if numeric_ids:
+            search = numeric_ids[0]
+        if not search and named_customer:
+            search = named_customer.name or ""
         tool_data["customers"] = get_customers(search=search, risk="high" if "high risk" in lowered else None, page=1, limit=10, db=db)
     if request.context and request.context.get("customer_id"):
         try:
@@ -320,15 +330,33 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         if "model" in lowered or "accuracy" in lowered or "feature" in lowered:
             info = tool_data["model_info"]
             metrics = info.get("metrics", {})
-            return f"**Current model**\n\n{info.get('model_name', 'Unavailable')} uses {len(info.get('features', []))} features. Accuracy: {metrics.get('accuracy', 'unavailable')}. F1 score: {metrics.get('f1', 'unavailable')}."
+            return f"Current model: {info.get('model_name', 'Unavailable')}. It uses {len(info.get('features', []))} features. Accuracy: {metrics.get('accuracy', 'unavailable')}. F1 score: {metrics.get('f1', 'unavailable')}."
         if "dataset" in lowered:
             profile = get_dataset_profile()
-            return f"**Dataset overview**\n\nThe processed dataset contains **{profile.get('rows', 'unavailable')}** rows with a churn rate of **{profile.get('churn_rate_percent', 'unavailable')}%**."
+            return f"Dataset overview: the processed dataset contains {profile.get('rows', 'unavailable')} rows with a churn rate of {profile.get('churn_rate_percent', 'unavailable')}%."
+        if search and "customers" in tool_data:
+            customer_data = tool_data["customers"]
+            if not customer_data["items"]:
+                return f"I could not find a customer matching {search or 'that request'} in the live customer records."
+            item = customer_data["items"][0]
+            probability = item.get("churn_probability")
+            reasons = " ".join(item.get("top_reasons", [])[:2]) or "No stored explanation is available."
+            customer_name = item.get("name") or f"Customer {item['id']}"
+            probability_text = f"{probability * 100:.1f}%" if probability is not None else "unavailable"
+            return f"{customer_name} is {item.get('risk_level') or 'unassessed'} risk with a churn probability of {probability_text}. Main reasons: {reasons}"
+        if not search and "customers" in tool_data and any(term in lowered for term in ["show", "list", "who"]):
+            names = ". ".join(f"{item['name'] or f'Customer {item['id']}'}: {(item.get('churn_probability') or 0) * 100:.1f}% risk" for item in tool_data["customers"]["items"])
+            return f"High-risk customers. {names or 'No high-risk customers found.'}"
+        if any(term in lowered for term in ["high risk", "medium risk", "low risk", "how many customers", "average churn", "churn rate"]):
+            return f"Churn overview. Total assessed: {summary['total_customers']}. High risk: {summary['high_risk_count']}. Medium risk: {summary.get('medium_risk_count', 0)}. Low risk: {summary['low_risk_count']}. Average churn probability: {summary['avg_churn_probability'] * 100:.1f}%."
+        if customer_intent and "customers" in tool_data:
+            names = ", ".join(item["name"] or f"Customer {item['id']}" for item in tool_data["customers"]["items"][:10])
+            return f"Live customers: {names or 'No assessed customers found.'}"
         if "customer" in lowered or "risk" in lowered:
-            return f"**Churn overview**\n\n- Total assessed: **{summary['total_customers']}**\n- High risk: **{summary['high_risk_count']}**\n- Medium risk: **{summary.get('medium_risk_count', 0)}**\n- Average churn probability: **{summary['avg_churn_probability'] * 100:.1f}%**"
+            return f"Churn overview. Total assessed: {summary['total_customers']}. High risk: {summary['high_risk_count']}. Medium risk: {summary.get('medium_risk_count', 0)}. Average churn probability: {summary['avg_churn_probability'] * 100:.1f}%."
         return "I can help with live churn metrics, customer search, customer risk explanations, model information, and retention actions."
 
-    if any(term in lowered for term in ["high risk", "medium risk", "low risk", "how many customers", "accuracy", "precision", "recall", "f1 score", "what model", "what features", "dataset"]):
+    if customer_intent or any(term in lowered for term in ["high risk", "medium risk", "low risk", "how many customers", "accuracy", "precision", "recall", "f1 score", "what model", "what features", "dataset"]):
         return {"response": fallback_response(), "data": tool_data}
 
     try:
@@ -339,7 +367,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         if not api_key:
             return {"response": fallback_response(), "data": tool_data}
         client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
-        system_prompt = """You are InsightOS AI, a professional customer churn intelligence assistant. Answer in English using Markdown. Use only the live tool data supplied below for numbers, customers, predictions, and model metrics. Never invent missing values. Explain ML features and SHAP reasons in plain business language. If the user asks for a list, format it as a compact Markdown table. Do not output raw JSON."""
+        system_prompt = """You are InsightOS AI, a professional customer churn intelligence assistant. Answer in concise, natural English plain text. Use only the live tool data supplied below for numbers, customers, predictions, and model metrics. Never invent missing values. Never use Markdown tables, JSON, asterisks, hash headings, pipe characters, or code formatting. Use short paragraphs or simple sentences. Explain ML features and SHAP reasons in plain business language. If the live customer search has no matches, say clearly that no matching customer was found."""
         response = client.chat.completions.create(
             model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Live data:\n{json.dumps(tool_data, default=str)}\n\nQuestion: {question}"}],
