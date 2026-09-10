@@ -50,7 +50,7 @@ export default function AIPanel() {
           <div className="ai-orb-core"><div className="ai-orb-wave" /><div className="ai-orb-gloss" /></div>
           <i className="ai-orb-particle particle-one" /><i className="ai-orb-particle particle-two" /><i className="ai-orb-particle particle-three" />
         </div>
-        <div className="max-w-[280px] text-center text-[14px] font-medium text-slate-200 whitespace-pre-line">{loading ? 'Thinking through your customer data...' : reply || 'Ask about churn risk, customer trends, or next actions.'}</div>
+        <AssistantMessage text={loading ? 'Thinking through your customer data...' : reply || 'Ask about churn risk, customer trends, or next actions.'} />
       </div>
       <div className="relative z-10 mb-4 grid grid-cols-2 gap-3">
         <a href="/assessment" className="flex min-h-[78px] flex-col items-center justify-center gap-2 rounded-2xl border border-white/[.12] bg-white/[.035] text-white transition hover:bg-white/[.08]"><PieChartIcon size={20} className="text-[#baff1a]" /><span className="text-[13px] font-semibold">Assessment</span></a>
@@ -62,4 +62,13 @@ export default function AIPanel() {
       </form>
     </section>
   );
+}
+
+function AssistantMessage({ text }: { text: string }) {
+  return <div className="ai-message">{text.split('\n').map((line, index) => {
+    const content = line.replace(/\*\*(.*?)\*\*/g, '$1');
+    if (line.startsWith('- ')) return <div key={index} className="ai-bullet">{content.slice(2)}</div>;
+    if (line.startsWith('**') || line.endsWith('**')) return <strong key={index} className="ai-heading">{content}</strong>;
+    return <div key={index}>{content || '\u00a0'}</div>;
+  })}</div>;
 }
