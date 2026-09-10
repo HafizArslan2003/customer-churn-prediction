@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import pandas as pd
 import json
+import re
 from functools import lru_cache
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.responses import FileResponse
@@ -325,7 +326,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 
     summary = get_reports_summary(db)
     tool_data = {"reports_summary": summary, "model_info": get_model_metadata()}
-    named_customer = next((candidate for candidate in db.query(models.Customer).all() if candidate.name and candidate.name.lower() in lowered), None)
+    named_customer = next((candidate for candidate in db.query(models.Customer).all() if candidate.name and re.search(rf"\b{re.escape(candidate.name.lower())}\b", lowered)), None)
     customer_intent = any(term in lowered for term in ["show", "list", "find", "search", "look up", "customer"]) or named_customer is not None
     search = ""
     if customer_intent:
@@ -338,9 +339,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         numeric_ids = [word.strip(".,?!") for word in question.split() if word.strip(".,?!").isdigit()]
         if numeric_ids:
             search = numeric_ids[0]
-        if not search and named_customer:
-            search = named_customer.name or ""
-        tool_data["customers"] = get_customers(search=search, risk="high" if "high risk" in lowered else None, page=1, limit=10, db=db)
+        if named_customer:
+            tool_data["named_customer"] = get_customer(named_customer.id, db)
+        else:
+            tool_data["customers"] = get_customers(search=search, risk="high" if "high risk" in lowered else None, page=1, limit=10, db=db)
     if request.context and request.context.get("customer_id"):
         try:
             tool_data["current_customer"] = get_customer(int(request.context["customer_id"]), db)
@@ -355,6 +357,16 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         if "dataset" in lowered:
             profile = get_dataset_profile()
             return f"Dataset overview: the processed dataset contains {profile.get('rows', 'unavailable')} rows with a churn rate of {profile.get('churn_rate_percent', 'unavailable')}%."
+        if "named_customer" in tool_data:
+            item = tool_data["named_customer"]
+            probability = item.get("churn_probability")
+            reasons = plain_language_reasons(item.get("top_reasons", []))
+            raw_name = item.get("name")
+            customer_name = raw_name.title() if raw_name else f"Customer {item['id']}"
+            probability_text = f"{probability * 100:.1f}%" if probability is not None else "unavailable"
+            risk = item.get('risk_level') or 'unassessed'
+            prediction_note = "The overall signal is still low." if risk == "low" else "This account deserves retention attention." if risk == "high" else "This account is worth monitoring."
+            return f"{customer_name} is currently {risk} risk, with an estimated churn probability of {probability_text}. The main signals are that {reasons[:-1].lower()}. {prediction_note}"
         if search and "customers" in tool_data:
             customer_data = tool_data["customers"]
             if not customer_data["items"]:
