@@ -353,7 +353,23 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         if "model" in lowered or "accuracy" in lowered or "feature" in lowered:
             info = tool_data["model_info"]
             metrics = info.get("metrics", {})
-            return f"Current model: {info.get('model_name', 'Unavailable')}. It uses {len(info.get('features', []))} features. Accuracy: {metrics.get('accuracy', 'unavailable')}. F1 score: {metrics.get('f1', 'unavailable')}."
+            feature_labels = {
+                "login_frequency": "login frequency",
+                "feature_usage_count": "feature usage count",
+                "support_ticket_volume": "support ticket volume",
+                "payment_amount": "payment amount",
+                "account_age": "account age",
+            }
+            features = [feature_labels.get(feature, feature.replace("_", " ")) for feature in info.get("features", [])]
+            feature_text = ", ".join(features) or "no features listed"
+            accuracy = metrics.get("accuracy")
+            f1 = metrics.get("f1")
+            precision = metrics.get("precision")
+            recall = metrics.get("recall")
+            metrics_text = ""
+            if isinstance(accuracy, (int, float)) and isinstance(f1, (int, float)):
+                metrics_text = f" Performance: {accuracy * 100:.1f}% accuracy, {precision * 100:.1f}% precision, {recall * 100:.1f}% recall, and {f1 * 100:.1f}% F1 score."
+            return f"The current model is {info.get('model_name', 'unavailable')}. It uses these {len(features)} features: {feature_text}. There are no other model features in the current metadata.{metrics_text}"
         if "dataset" in lowered:
             profile = get_dataset_profile()
             return f"Dataset overview: the processed dataset contains {profile.get('rows', 'unavailable')} rows with a churn rate of {profile.get('churn_rate_percent', 'unavailable')}%."
@@ -392,7 +408,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             return f"Churn overview. Total assessed: {summary['total_customers']}. High risk: {summary['high_risk_count']}. Medium risk: {summary.get('medium_risk_count', 0)}. Average churn probability: {summary['avg_churn_probability'] * 100:.1f}%."
         return "I can help with live churn metrics, customer search, customer risk explanations, model information, and retention actions."
 
-    if customer_intent or any(term in lowered for term in ["high risk", "medium risk", "low risk", "how many customers", "accuracy", "precision", "recall", "f1 score", "what model", "what features", "dataset"]):
+    if customer_intent or any(term in lowered for term in ["high risk", "medium risk", "low risk", "how many customers", "accuracy", "precision", "recall", "f1 score", "what model", "what features", "feature", "dataset"]):
         return {"response": fallback_response(), "data": tool_data}
 
     try:
