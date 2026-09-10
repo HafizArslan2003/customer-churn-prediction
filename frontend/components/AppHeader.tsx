@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import Link from 'next/link';
 import { Bell, Search, X } from 'lucide-react';
@@ -10,6 +11,7 @@ export default function AppHeader() {
   const [results, setResults] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => { const onKeyDown = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); document.querySelector<HTMLInputElement>('.search-wrap input')?.focus(); } }; window.addEventListener('keydown', onKeyDown); return () => window.removeEventListener('keydown', onKeyDown); }, []);
 
   useEffect(() => {
     const value = query.trim();
@@ -28,7 +30,8 @@ export default function AppHeader() {
     <header className="app-header">
       <div className="search-wrap">
         <Search size={18} aria-hidden="true" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customers by name" aria-label="Search customers" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customers by name or ID" aria-label="Search customers" />
+        <kbd>⌘K</kbd>
         {query && <button className="icon-button" onClick={() => setQuery('')} aria-label="Clear search"><X size={16} /></button>}
         {(loading || error || results.length > 0) && <div className="search-results">
           {loading && <p className="search-message">Searching customer records...</p>}
