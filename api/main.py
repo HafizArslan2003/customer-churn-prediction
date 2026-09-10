@@ -56,6 +56,27 @@ def recommendations_for(level: str) -> list[str]:
         return ["Monitor engagement", "Share relevant product guidance"]
     return ["Continue regular engagement", "Invite the customer to explore more features"]
 
+def plain_language_reasons(reasons: list[str]) -> str:
+    labels = {
+        "login_frequency": "lower login activity",
+        "feature_usage_count": "limited feature adoption",
+        "support_ticket_volume": "support activity",
+        "payment_amount": "payment behavior",
+        "account_age": "a newer account",
+    }
+    readable = []
+    for reason in reasons[:3]:
+        feature = next((key for key in labels if key in reason), None)
+        if not feature:
+            continue
+        direction = "increasing" if "increases churn risk" in reason else "reducing"
+        readable.append(f"{labels[feature]} is {direction} churn risk")
+    if not readable:
+        return "No clear risk drivers are available from this assessment."
+    if len(readable) == 1:
+        return readable[0].capitalize() + "."
+    return ", ".join(readable[:-1]).capitalize() + ", and " + readable[-1] + "."
+
 def get_model_metadata() -> dict:
     metadata_path = os.path.join(MODEL_DIR, "metadata.json")
     if os.path.exists(metadata_path):
@@ -340,10 +361,13 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 return f"I could not find a customer matching {search or 'that request'} in the live customer records."
             item = customer_data["items"][0]
             probability = item.get("churn_probability")
-            reasons = " ".join(item.get("top_reasons", [])[:2]) or "No stored explanation is available."
-            customer_name = item.get("name") or f"Customer {item['id']}"
+            reasons = plain_language_reasons(item.get("top_reasons", []))
+            raw_name = item.get("name")
+            customer_name = raw_name.title() if raw_name else f"Customer {item['id']}"
             probability_text = f"{probability * 100:.1f}%" if probability is not None else "unavailable"
-            return f"{customer_name} is {item.get('risk_level') or 'unassessed'} risk with a churn probability of {probability_text}. Main reasons: {reasons}"
+            risk = item.get('risk_level') or 'unassessed'
+            prediction_note = "The overall signal is still low." if risk == "low" else "This account deserves retention attention." if risk == "high" else "This account is worth monitoring."
+            return f"{customer_name} is currently {risk} risk, with an estimated churn probability of {probability_text}. The main signals are that {reasons[:-1].lower()}. {prediction_note}"
         if not search and "customers" in tool_data and any(term in lowered for term in ["show", "list", "who"]):
             names = ". ".join(f"{item['name'] or f'Customer {item['id']}'}: {(item.get('churn_probability') or 0) * 100:.1f}% risk" for item in tool_data["customers"]["items"])
             return f"High-risk customers. {names or 'No high-risk customers found.'}"
