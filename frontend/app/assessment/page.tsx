@@ -2,18 +2,17 @@
 
 import { FormEvent, useState } from 'react';
 import { Activity, ArrowRight, CheckCircle2, ShieldAlert } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
+import { apiFetch } from '@/lib/api';
 type FormData = { name: string; login_frequency: number; feature_usage_count: number; support_ticket_volume: number; payment_amount: number; account_age: number };
 const initialForm: FormData = { name: '', login_frequency: 5, feature_usage_count: 4, support_ticket_volume: 1, payment_amount: 65, account_age: 400 };
 
 export default function AssessmentPage() {
   const [form, setForm] = useState(initialForm); const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ churn_probability: number; prediction: number; top_reasons: string[] } | null>(null); const [error, setError] = useState('');
+  const [result, setResult] = useState<{ churn_probability: number; prediction: number; risk_level: string; top_reasons: string[]; recommendations: string[] } | null>(null); const [error, setError] = useState('');
   async function submit(event: FormEvent) {
     event.preventDefault(); setLoading(true); setError('');
-    try { const response = await fetch(`${API_URL}/predict`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, name: form.name || null }) }); if (!response.ok) throw new Error(); setResult(await response.json()); }
-    catch { setError('Model server se connection nahi hua. Uvicorn ko port 8000 par run karein.'); } finally { setLoading(false); }
+    try { setResult(await apiFetch<typeof result extends null ? never : NonNullable<typeof result>>('/predict', { method: 'POST', body: JSON.stringify({ ...form, name: form.name || null }) })); }
+    catch { setError('Unable to connect to the churn service.'); } finally { setLoading(false); }
   }
   const fields: { key: Exclude<keyof FormData, 'name'>; label: string; hint: string }[] = [
     { key: 'login_frequency', label: 'Login frequency', hint: 'logins per week' }, { key: 'feature_usage_count', label: 'Feature usage', hint: 'features used' }, { key: 'support_ticket_volume', label: 'Support tickets', hint: 'tickets this month' }, { key: 'payment_amount', label: 'Monthly payment', hint: 'USD' }, { key: 'account_age', label: 'Account age', hint: 'days' },

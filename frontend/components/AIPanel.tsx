@@ -1,9 +1,8 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { Mic, Send, PieChart as PieChartIcon, FileText, Plus, Minus, Sparkles } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
+import { Send, PieChart as PieChartIcon, FileText, Plus, Minus, Sparkles } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
 
 export default function AIPanel() {
   const [input, setInput] = useState('');
@@ -25,13 +24,12 @@ export default function AIPanel() {
     if (!question || loading) return;
     setLoading(true); setReply('');
     try {
-      const response = await fetch(`${API_URL}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
-      const payload = await response.json();
-      const message = payload.response ?? payload.detail ?? 'Assistant abhi response nahi de saka.';
+      const payload = await apiFetch<{ response?: string; detail?: string }>('/chat', { method: 'POST', body: JSON.stringify({ question, context: { current_page: 'dashboard' } }) });
+      const message = payload.response ?? payload.detail ?? 'The assistant could not answer that.';
       setReply(message);
       speak(message);
     } catch {
-      const message = 'The backend could not be reached. Start the FastAPI server on port 8000 and try again.';
+      const message = 'The backend could not be reached. Start the FastAPI service and try again.';
       setReply(message);
       speak(message);
     }
@@ -52,15 +50,15 @@ export default function AIPanel() {
           <div className="ai-orb-core"><div className="ai-orb-wave" /><div className="ai-orb-gloss" /></div>
           <i className="ai-orb-particle particle-one" /><i className="ai-orb-particle particle-two" /><i className="ai-orb-particle particle-three" />
         </div>
-        <p className="max-w-[260px] text-center text-[14px] font-medium text-slate-200">{loading ? 'Thinking through your customer data…' : reply || 'Ask about churn risk, customer trends, or next actions.'}</p>
+        <div className="max-w-[280px] text-center text-[14px] font-medium text-slate-200 whitespace-pre-line">{loading ? 'Thinking through your customer data...' : reply || 'Ask about churn risk, customer trends, or next actions.'}</div>
       </div>
       <div className="relative z-10 mb-4 grid grid-cols-2 gap-3">
         <a href="/assessment" className="flex min-h-[78px] flex-col items-center justify-center gap-2 rounded-2xl border border-white/[.12] bg-white/[.035] text-white transition hover:bg-white/[.08]"><PieChartIcon size={20} className="text-[#baff1a]" /><span className="text-[13px] font-semibold">Assessment</span></a>
         <a href="/reports" className="flex min-h-[78px] flex-col items-center justify-center gap-2 rounded-2xl border border-white/[.12] bg-white/[.035] text-white transition hover:bg-white/[.08]"><FileText size={20} className="text-[#baff1a]" /><span className="text-[13px] font-semibold">Reports</span></a>
       </div>
       <form onSubmit={askAssistant} className="relative z-10 flex items-center rounded-full border border-white/[.13] bg-white/[.055] p-1.5">
-        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask anything…" className="min-w-0 flex-1 bg-transparent px-3 text-[13px] font-medium text-white outline-none placeholder:text-slate-500" />
-        <button type="submit" aria-label="Send question" className="rounded-full p-2.5 text-[#e9ffad] transition hover:bg-white/10 disabled:opacity-50" disabled={loading}><Send size={17} /></button><button type="button" aria-label="Voice input" className="rounded-full bg-white/[.1] p-2.5 text-white"><Mic size={16} /></button>
+        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask about live churn data..." className="min-w-0 flex-1 bg-transparent px-3 text-[13px] font-medium text-white outline-none placeholder:text-slate-500" />
+        <button type="submit" aria-label="Send question" className="rounded-full p-2.5 text-[#e9ffad] transition hover:bg-white/10 disabled:opacity-50" disabled={loading}><Send size={17} /></button>
       </form>
     </section>
   );

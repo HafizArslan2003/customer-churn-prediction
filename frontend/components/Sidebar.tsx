@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BarChart2, Settings, HelpCircle, LogOut, ClipboardCheck, Users } from 'lucide-react';
+import { Home, BarChart2, Settings, HelpCircle, ClipboardCheck, Users, BrainCircuit } from 'lucide-react';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -14,7 +14,7 @@ export default function Sidebar() {
   );
 
   return (
-    <aside className="flex min-h-full w-[254px] shrink-0 flex-col border-r border-[#e7e9ee] bg-white px-5 py-7 shadow-[8px_0_24px_rgba(30,35,50,0.025)] max-[900px]:hidden">
+    <aside className="sidebar">
       {/* Logo */}
       <div className="mb-7 flex items-center gap-3 border-b border-[#eef0f3] pb-7 pl-0.5">
         <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#101312]">
@@ -23,27 +23,23 @@ export default function Sidebar() {
         <span className="text-[27px] font-bold tracking-[-0.06em] text-[#101312]">InsightOS</span>
       </div>
       
-      <p className="mb-2 pl-1 text-[14px] font-medium text-slate-500">Main</p>
+      <p className="sidebar-label">Main</p>
       
-      <nav className="mb-6 flex flex-col space-y-0.5 border-b border-[#eef0f3] pb-6">
+      <nav className="sidebar-nav">
         {navItem('/', 'Dashboard', Home)}
         {navItem('/assessment', 'Risk Assessment', ClipboardCheck)}
-        {navItem('/reports', 'Analytics & Reports', BarChart2)}
         {navItem('/customers', 'Customers', Users)}
+        {navItem('/reports', 'Analytics & Reports', BarChart2)}
+        {navItem('/model-insights', 'Model Insights', BrainCircuit)}
       </nav>
 
-      <p className="mb-2 pl-1 text-[14px] font-medium text-slate-500">Other</p>
+      <p className="sidebar-label">Other</p>
       
       <nav className="flex flex-col space-y-1">
         {navItem('/settings', 'Settings', Settings)}
         {navItem('/help', 'Help', HelpCircle)}
       </nav>
 
-      <div className="mt-auto">
-        <button className="flex items-center gap-3 px-4 py-3 w-full text-left text-[14px] font-medium text-gray-500 hover:text-gray-800 transition-all">
-          <LogOut size={18} /> Log out
-        </button>
-      </div>
     </aside>
   );
 }

@@ -4,6 +4,10 @@
 
 __pycache__/
 *.py[cod]
+*.db
+*.sqlite3
+venv/
+.venv/
 
 frontend/.next/
 frontend/node_modules/

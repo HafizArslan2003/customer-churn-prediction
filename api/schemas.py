@@ -1,6 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Any
 
 class CustomerData(BaseModel):
     name: Optional[str] = None
@@ -13,4 +12,10 @@ class CustomerData(BaseModel):
 class PredictionResponse(BaseModel):
     churn_probability: float
     prediction: int
+    risk_level: str
     top_reasons: List[str]
+    recommendations: List[str] = []
+
+class ChatRequest(BaseModel):
+    question: str
+    context: Optional[dict[str, Any]] = None

@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import os
 import pickle
+import json
+from datetime import datetime, timezone
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -84,6 +86,28 @@ def train_and_evaluate():
         pickle.dump(explainer, f)
     with open(os.path.join(model_dir, "feature_means.pkl"), "wb") as f:
         pickle.dump(means, f)
+
+    metrics = {}
+    for name, candidate in models.items():
+        candidate_pred = candidate.predict(X_test_scaled)
+        metrics[name] = {
+            "accuracy": round(float(accuracy_score(y_test, candidate_pred)), 4),
+            "precision": round(float(precision_score(y_test, candidate_pred, zero_division=0)), 4),
+            "recall": round(float(recall_score(y_test, candidate_pred, zero_division=0)), 4),
+            "f1": round(float(f1_score(y_test, candidate_pred, zero_division=0)), 4),
+        }
+    metadata = {
+        "model_name": best_name,
+        "features": list(X.columns),
+        "metrics": metrics[best_name],
+        "training_rows": int(len(X_train)),
+        "test_rows": int(len(X_test)),
+        "dataset_rows": int(len(df)),
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "version": "1.0",
+    }
+    with open(os.path.join(model_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
         
     print(f"Model and preprocessing artifacts saved to {model_dir}/")
 
