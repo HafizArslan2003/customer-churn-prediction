@@ -31,3 +31,16 @@ class Prediction(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer", back_populates="prediction")
+
+class RetentionTask(Base):
+    __tablename__ = "retention_tasks"
+
+    id = Column(Integer,primary_key=True,index=True)
+    customer_id = Column(Integer,ForeignKey("customers.id"))
+    title = Column(String)
+    description = Column(String)
+    priority = Column(String,default="medium")
+    status = Column(String,default="pending")
+    created_at = Column(DateTime,default=lambda: datetime.now(timezone.utc))
+
+    customer = relationship("Customer")
