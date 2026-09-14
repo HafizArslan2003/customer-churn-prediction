@@ -5,8 +5,8 @@ shap
 pyarrow
 fastapi
 uvicorn
-
 sqlalchemy
 openai
 python-dotenv
-redis>=5.0
+redis
+celery

@@ -12,10 +12,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, desc
 import shap
 
-try:
-    from api.tasks import send_retention_email_task
-except ImportError:
-    from tasks import send_retention_email_task
+def _get_retention_task_fn():
+    """Lazy import of Celery task — returns None if Redis/Celery is unavailable."""
+    try:
+        try:
+            from api.tasks import send_retention_email_task
+        except ImportError:
+            from tasks import send_retention_email_task
+        return send_retention_email_task
+    except Exception as _e:
+        return None
+
 
 # Support both supported ways of starting the server:
 #   project root -> uvicorn api.main:app --reload
@@ -199,7 +206,7 @@ def predict_churn(data: CustomerData, request: Request, db: Session = Depends(ge
             .filter(
                 models.RetentionTask.customer_id == db_customer.id,
                 models.RetentionTask.title == "Contact high-risk customer",
-                models.RetentionTask.status == "pending",
+                models.RetentionTask.status.in_(["pending", "in_progress"])
             )
             .first()
         )
