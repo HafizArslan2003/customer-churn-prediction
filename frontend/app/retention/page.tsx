@@ -77,18 +77,18 @@ export default function RetentionTasksPage() {
       </p>
 
       {/* Summary row */}
-      <div className="detail-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '1.5rem' }}>
-        <div className="panel" style={{ padding: '1.25rem 1.5rem' }}>
-          <p className="chart-eyebrow">Total tasks</p>
-          <p style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>{tasks.length}</p>
+      <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '1.5rem' }}>
+        <div className="metric-card">
+          <p className="metric-label">Total tasks</p>
+          <p className="metric-value">{tasks.length}</p>
         </div>
-        <div className="panel" style={{ padding: '1.25rem 1.5rem' }}>
-          <p className="chart-eyebrow">Pending</p>
-          <p style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>{tasks.filter(t => t.status === 'pending').length}</p>
+        <div className="metric-card">
+          <p className="metric-label">Pending</p>
+          <p className="metric-value">{tasks.filter(t => t.status === 'pending').length}</p>
         </div>
-        <div className="panel" style={{ padding: '1.25rem 1.5rem' }}>
-          <p className="chart-eyebrow">Emails sent</p>
-          <p style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>{tasks.filter(t => t.email_status === 'sent').length}</p>
+        <div className="metric-card">
+          <p className="metric-label">Emails sent</p>
+          <p className="metric-value">{tasks.filter(t => t.email_status === 'sent').length}</p>
         </div>
       </div>
 
