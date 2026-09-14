@@ -41,6 +41,9 @@ class RetentionTask(Base):
     description = Column(String)
     priority = Column(String,default="medium")
     status = Column(String,default="pending")
+    action_type = Column(String, nullable=True)
+    email_status = Column(String, default="pending")
+    completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime,default=lambda: datetime.now(timezone.utc))
 
     customer = relationship("Customer")

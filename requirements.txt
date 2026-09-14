@@ -9,3 +9,4 @@ uvicorn
 sqlalchemy
 openai
 python-dotenv
+redis>=5.0

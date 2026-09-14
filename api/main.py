@@ -5,12 +5,17 @@ import pandas as pd
 import json
 import re
 from functools import lru_cache
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, desc
 import shap
+
+try:
+    from api.tasks import send_retention_email_task
+except ImportError:
+    from tasks import send_retention_email_task
 
 # Support both supported ways of starting the server:
 #   project root -> uvicorn api.main:app --reload
@@ -19,11 +24,15 @@ try:
     from . import models, schemas
     from .database import engine, get_db
     from .schemas import CustomerData, PredictionResponse, ChatRequest
+    from .config import RISK_THRESHOLDS, risk_level, risk_thresholds_payload
+    from .cache import delete as cache_delete, get_json, rate_limit, set_json
 except ImportError:
     import models
     import schemas
     from database import engine, get_db
     from schemas import CustomerData, PredictionResponse, ChatRequest
+    from config import RISK_THRESHOLDS, risk_level, risk_thresholds_payload
+    from cache import delete as cache_delete, get_json, rate_limit, set_json
 
 # Create DB tables
 models.Base.metadata.create_all(bind=engine)
@@ -42,13 +51,6 @@ app.add_middleware(
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "../model")
 DATASET_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/customers.csv"))
 FEATURE_NAMES = ["login_frequency", "feature_usage_count", "support_ticket_volume", "payment_amount", "account_age"]
-
-def risk_level(probability: float) -> str:
-    if probability >= 0.7:
-        return "high"
-    if probability >= 0.4:
-        return "medium"
-    return "low"
 
 def recommendations_for(level: str) -> list[str]:
     if level == "high":
@@ -82,8 +84,10 @@ def get_model_metadata() -> dict:
     metadata_path = os.path.join(MODEL_DIR, "metadata.json")
     if os.path.exists(metadata_path):
         with open(metadata_path, encoding="utf-8") as metadata_file:
-            return json.load(metadata_file)
-    return {"model_name": type(model).__name__ if model is not None else "Unavailable", "features": FEATURE_NAMES, "metrics": {}, "training_rows": None, "test_rows": None, "dataset_rows": None, "trained_at": None, "version": None}
+            metadata = json.load(metadata_file)
+            metadata["risk_thresholds"] = risk_thresholds_payload()
+            return metadata
+    return {"model_name": type(model).__name__ if model is not None else "Unavailable", "features": FEATURE_NAMES, "metrics": {}, "training_rows": None, "test_rows": None, "dataset_rows": None, "trained_at": None, "version": None, "risk_thresholds": risk_thresholds_payload()}
 
 
 @lru_cache(maxsize=1)
@@ -129,7 +133,9 @@ def serve_ui():
 
 
 @app.post("/predict", response_model=PredictionResponse)
-def predict_churn(data: CustomerData, db: Session = Depends(get_db)):
+def predict_churn(data: CustomerData, request: Request, db: Session = Depends(get_db)):
+    if not rate_limit(f"predict:{request.client.host if request.client else 'unknown'}", limit=30, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Prediction rate limit reached. Please try again shortly.")
     if model is None:
         raise HTTPException(status_code=500, detail="Model artifacts not found.")
 
@@ -186,7 +192,81 @@ def predict_churn(data: CustomerData, db: Session = Depends(get_db)):
         top_reasons=json.dumps(reasons)
     )
     db.add(db_prediction)
+
+    if level == "high":
+        existing_task = (
+            db.query(models.RetentionTask)
+            .filter(
+                models.RetentionTask.customer_id == db_customer.id,
+                models.RetentionTask.title == "Contact high-risk customer",
+                models.RetentionTask.status == "pending",
+            )
+            .first()
+        )
+        if not existing_task:
+            reason_summary = " ".join(reasons) if reasons else "No SHAP reasons were available."
+            new_task = models.RetentionTask(
+                customer_id=db_customer.id,
+                title="Contact high-risk customer",
+                description=f"Churn probability: {float(prob):.1%}. Main risk reasons: {reason_summary}",
+                priority="high",
+                status="pending",
+                action_type="email",
+                email_status="pending"
+            )
+            db.add(new_task)
+            db.commit()
+            db.refresh(new_task)
+            
+            # Queue Celery Task
+            try:
+                send_retention_email_task.delay(db_customer.id, new_task.id)
+            except Exception as e:
+                print(f"Failed to queue Celery task: {e}")
+                
     db.commit()
+    cache_delete("insightos:reports:summary")
+
+    return {"churn_probability": float(prob), "prediction": prediction, "risk_level": level, "top_reasons": reasons, "recommendations": recommendations}
+
+
+@app.post("/predict/what-if", response_model=PredictionResponse)
+def predict_churn_what_if(data: CustomerData):
+    if model is None:
+        raise HTTPException(status_code=500, detail="Model artifacts not found.")
+
+    input_data = pd.DataFrame([[
+        data.login_frequency, data.feature_usage_count,
+        data.support_ticket_volume, data.payment_amount, data.account_age
+    ]], columns=FEATURE_NAMES)
+
+    input_scaled = scaler.transform(input_data)
+    prob = model.predict_proba(input_scaled)[0][1]
+    prediction = int(model.predict(input_scaled)[0])
+
+    shap_values = explainer.shap_values(input_scaled)
+    if isinstance(shap_values, list):
+        shap_vals_churn = shap_values[1][0]
+    elif len(shap_values.shape) == 3:
+        shap_vals_churn = shap_values[0, :, 1]
+    else:
+        shap_vals_churn = shap_values[0]
+
+    reasons = []
+    for idx in np.argsort(np.abs(shap_vals_churn))[::-1][:3]:
+        feat = FEATURE_NAMES[idx]
+        val = input_data.iloc[0, idx]
+        mean_val = feature_means[feat]
+        shap_val = shap_vals_churn[idx]
+        if abs(shap_val) < 0.01:
+            continue
+        direction = "increases" if shap_val > 0 else "decreases"
+        diff_pct = ((val - mean_val) / (mean_val + 1e-5)) * 100
+        comp = f"{abs(diff_pct):.0f}% {'above' if val > mean_val else 'below'} average"
+        reasons.append(f"{feat} is {comp} ({val:.1f} vs avg {mean_val:.1f}), which {direction} churn risk.")
+
+    level = risk_level(float(prob))
+    recommendations = recommendations_for(level)
 
     return {"churn_probability": float(prob), "prediction": prediction, "risk_level": level, "top_reasons": reasons, "recommendations": recommendations}
 
@@ -197,21 +277,33 @@ def get_customers(
     risk: str | None = Query(None, pattern="^(low|medium|high)$"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
+    sort: str = Query("recent", pattern="^(recent|risk|name)$"),
     db: Session = Depends(get_db),
 ):
-    query = db.query(models.Customer)
+    query = db.query(models.Customer).outerjoin(models.Prediction)
     if search:
         filters = [models.Customer.name.ilike(f"%{search}%")]
         if search.isdigit():
             filters.append(models.Customer.id == int(search))
         query = query.filter(or_(*filters))
-    customers = query.order_by(models.Customer.created_at.desc()).all()
+    if risk == "high":
+        query = query.filter(models.Prediction.churn_probability >= RISK_THRESHOLDS["medium_max"])
+    elif risk == "medium":
+        query = query.filter(models.Prediction.churn_probability >= RISK_THRESHOLDS["low_max"], models.Prediction.churn_probability < RISK_THRESHOLDS["medium_max"])
+    elif risk == "low":
+        query = query.filter(models.Prediction.churn_probability < RISK_THRESHOLDS["low_max"])
+    total = query.count()
+    if sort == "risk":
+        query = query.order_by(desc(models.Prediction.churn_probability), desc(models.Customer.created_at))
+    elif sort == "name":
+        query = query.order_by(models.Customer.name.asc(), desc(models.Customer.id))
+    else:
+        query = query.order_by(models.Customer.created_at.desc())
+    customers = query.offset((page - 1) * limit).limit(limit).all()
     result = []
     for c in customers:
         pred = c.prediction
         level = risk_level(pred.churn_probability) if pred else None
-        if risk and level != risk:
-            continue
         result.append({
             "id": c.id,
             "name": c.name,
@@ -226,9 +318,7 @@ def get_customers(
             "risk_level": level,
             "top_reasons": json.loads(pred.top_reasons) if pred and pred.top_reasons else []
         })
-    total = len(result)
-    start = (page - 1) * limit
-    return {"items": result[start:start + limit], "total": total, "page": page, "limit": limit}
+    return {"items": result, "total": total, "page": page, "limit": limit}
 
 
 @app.get("/customers/{customer_id}")
@@ -254,13 +344,63 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
     }
 
 
+
+@app.get("/retention-tasks", response_model=list[schemas.RetentionTaskOut])
+def get_retention_tasks(
+    status: str | None = None,
+    priority: str | None = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.RetentionTask)
+    if status:
+        query = query.filter(models.RetentionTask.status == status)
+    if priority:
+        query = query.filter(models.RetentionTask.priority == priority)
+        
+    tasks = query.order_by(models.RetentionTask.created_at.desc()).all()
+    for t in tasks:
+        t.customer_name = t.customer.name if t.customer and t.customer.name else f"Customer #{t.customer_id}"
+    return tasks
+
+@app.get("/retention-tasks/{task_id}", response_model=schemas.RetentionTaskOut)
+def get_retention_task(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(models.RetentionTask).filter(models.RetentionTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.customer_name = task.customer.name if task.customer and task.customer.name else f"Customer #{task.customer_id}"
+    return task
+
+@app.patch("/retention-tasks/{task_id}", response_model=schemas.RetentionTaskOut)
+def update_retention_task(task_id: int, update_data: schemas.RetentionTaskUpdate, db: Session = Depends(get_db)):
+    task = db.query(models.RetentionTask).filter(models.RetentionTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    if update_data.status is not None:
+        task.status = update_data.status
+        if update_data.status == "completed":
+            from datetime import datetime, timezone
+            task.completed_at = datetime.now(timezone.utc)
+            
+    if update_data.priority is not None:
+        task.priority = update_data.priority
+        
+    db.commit()
+    db.refresh(task)
+    task.customer_name = task.customer.name if task.customer and task.customer.name else f"Customer #{task.customer_id}"
+    return task
+
+
 @app.get("/reports/summary")
 def get_reports_summary(db: Session = Depends(get_db)):
+    cached = get_json("insightos:reports:summary")
+    if cached is not None:
+        return cached
     all_preds = db.query(models.Prediction).all()
     total = len(all_preds)
 
     if total == 0:
-        return {
+        empty_summary = {
             "total_customers": 0,
             "high_risk_count": 0,
             "medium_risk_count": 0,
@@ -270,6 +410,8 @@ def get_reports_summary(db: Session = Depends(get_db)):
             "avg_churn_probability": 0,
             "daily_trend": []
         }
+        set_json("insightos:reports:summary", empty_summary, ttl_seconds=30)
+        return empty_summary
 
     high_risk = sum(1 for p in all_preds if risk_level(p.churn_probability) == "high")
     medium_risk = sum(1 for p in all_preds if risk_level(p.churn_probability) == "medium")
@@ -293,7 +435,7 @@ def get_reports_summary(db: Session = Depends(get_db)):
         for row in daily_rows if row.day
     ]
 
-    return {
+    summary = {
         "total_customers": total,
         "high_risk_count": high_risk,
         "medium_risk_count": medium_risk,
@@ -304,11 +446,18 @@ def get_reports_summary(db: Session = Depends(get_db)):
         "risk_distribution": {"high": high_risk, "medium": medium_risk, "low": low_risk},
         "daily_trend": daily_trend
     }
+    set_json("insightos:reports:summary", summary, ttl_seconds=30)
+    return summary
 
 
 @app.get("/model/info")
 def get_model_info():
     return get_model_metadata()
+
+
+@app.get("/config")
+def get_app_config():
+    return {"risk_thresholds": risk_thresholds_payload()}
 
 
 @app.get("/dataset/summary")
@@ -318,11 +467,51 @@ def dataset_summary():
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
+    if not rate_limit(f"chat:{http_request.client.host if http_request.client else 'unknown'}", limit=40, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Chat rate limit reached. Please try again shortly.")
     question = request.question.strip()
     lowered = question.lower()
     if not question:
         raise HTTPException(status_code=400, detail="Question is required.")
+
+    # The assistant uses the same service functions as the product UI.  These
+    # deterministic responses deliberately avoid asking an LLM to interpolate
+    # live numbers it has not retrieved.
+    context = request.context or {}
+    customer_id = context.get("customer_id")
+    numeric_ids = [word.strip(".,?!#") for word in question.split() if word.strip(".,?!#").isdigit()]
+    if numeric_ids:
+        customer_id = numeric_ids[0]
+    wants_model = any(term in lowered for term in ["model", "accuracy", "precision", "recall", "f1", "feature"])
+    wants_dataset = "dataset" in lowered
+    wants_list = "how many" not in lowered and any(term in lowered for term in ["show", "list", "highest", "high risk customers", "find", "search"])
+    wants_summary = any(term in lowered for term in ["how many", "overview", "churn rate", "average churn", "today", "insight"])
+
+    if wants_model:
+        return {"type": "model", "data": get_model_metadata()}
+    if wants_dataset:
+        return {"type": "analytics", "title": "Dataset overview", "data": get_dataset_profile()}
+    if customer_id and ("customer" in lowered or "this" in lowered or "why" in lowered or context.get("current_page") == "customer_detail"):
+        try:
+            return {"type": "customer", "data": get_customer(int(customer_id), db)}
+        except (HTTPException, ValueError):
+            return {"type": "message", "response": "I could not find that customer in the live assessment records."}
+    if wants_list:
+        search = ""
+        for verb in ("find", "search", "show"):
+            if verb in lowered:
+                search = question[lowered.index(verb) + len(verb):].strip(" .?!")
+                break
+        if "high risk" in lowered or "highest" in lowered:
+            search = ""
+        customers = get_customers(search=search, risk="high" if ("high risk" in lowered or "highest" in lowered) else None, page=1, limit=10, sort="risk", db=db)
+        return {"type": "customer_list", "title": "High-risk customers" if ("high risk" in lowered or "highest" in lowered) else "Customer search", "data": customers}
+    if wants_summary or any(term in lowered for term in ["risk", "retain", "retention"]):
+        return {"type": "analytics", "title": "Churn overview", "data": get_reports_summary(db)}
+    if "assess" in lowered or "predict" in lowered:
+        return {"type": "message", "response": "Open **Risk Assessment** to enter the customer signals and run a live prediction. I will not estimate a probability without those inputs."}
+    return {"type": "message", "response": "I can retrieve live churn analytics, search assessed customers, explain a customer record, and show the current model’s evaluation. Try **“Show me the highest risk customers”** or **“What model are we using?”**"}
 
     summary = get_reports_summary(db)
     tool_data = {"reports_summary": summary, "model_info": get_model_metadata()}

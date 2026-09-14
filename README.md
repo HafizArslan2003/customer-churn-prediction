@@ -151,3 +151,41 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/chat" -Method Post `
 - **ML:** scikit-learn, SHAP, Pandas, NumPy
 - **AI Assistant:** Groq `llama-3.1-8b-instant` (OpenAI compatible API)
 - **Voice:** Web Speech API (SpeechRecognition + SpeechSynthesis)
+
+
+## Retention Automation (Redis + Celery)
+
+This project features an automated retention system that triggers when a customer's churn probability crosses the high-risk threshold (>= 70%).
+
+When triggered:
+1. A RetentionTask is automatically created in the database.
+2. A background Celery job is queued via Redis.
+3. A Celery worker processes the job and sends a personalized email to the customer using SHAP reasons to tailor the message.
+
+### Local Setup Instructions
+
+You need three terminal windows to run the complete stack:
+
+**Terminal 1: FastAPI Backend**
+\\ash
+.\venv\Scripts\Activate.ps1
+uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
+\
+**Terminal 2: Redis Server**
+If on Windows, you can run Redis via WSL or Memurai:
+\\ash
+redis-server
+\
+**Terminal 3: Celery Worker**
+\\ash
+.\venv\Scripts\Activate.ps1
+celery -A api.celery_app.celery_app worker --loglevel=info --pool=solo
+\*(Note: on Windows, --pool=solo is usually required for Celery)*
+
+**Terminal 4: Next.js Frontend**
+\\ash
+cd frontend
+npm run dev
+\
+### Email Configuration
+Check .env.example to see how to configure the email SMTP server. If credentials are missing, the system gracefully falls back to logging the email to the console.
