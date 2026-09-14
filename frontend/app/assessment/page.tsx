@@ -4,16 +4,40 @@ import { FormEvent, useState } from 'react';
 import { Activity, ArrowRight, Banknote, CalendarDays, CheckCircle2, LifeBuoy, LogIn, Sparkles, UserRound } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 
+import BulkAssessment from '@/components/BulkAssessment';
+
 type FormData = { name: string; login_frequency: number; feature_usage_count: number; support_ticket_volume: number; payment_amount: number; account_age: number };
 type Result = { churn_probability: number; prediction: number; risk_level: string; top_reasons: string[]; recommendations: string[] };
 const initialForm: FormData = { name: '', login_frequency: 5, feature_usage_count: 4, support_ticket_volume: 1, payment_amount: 65, account_age: 400 };
 const fields = [{ key: 'login_frequency', label: 'Login frequency', description: 'Weekly sign-ins show active engagement.', unit: 'per week', icon: LogIn, group: 'Engagement' }, { key: 'feature_usage_count', label: 'Feature usage', description: 'Number of product capabilities used.', unit: 'features', icon: Activity, group: 'Engagement' }, { key: 'support_ticket_volume', label: 'Support tickets', description: 'Recent support requests can signal friction.', unit: 'this month', icon: LifeBuoy, group: 'Support' }, { key: 'payment_amount', label: 'Payment amount', description: 'Current recurring payment value.', unit: 'USD / month', icon: Banknote, group: 'Financial' }, { key: 'account_age', label: 'Account age', description: 'Time since the account was created.', unit: 'days', icon: CalendarDays, group: 'Customer profile' }] as const;
 
 export default function AssessmentPage() {
+  const [activeTab, setActiveTab] = useState<'individual' | 'bulk'>('individual');
   const [form, setForm] = useState<FormData>(initialForm); const [loading, setLoading] = useState(false); const [result, setResult] = useState<Result | null>(null); const [error, setError] = useState('');
   async function submit(event: FormEvent) { event.preventDefault(); setLoading(true); setError(''); try { setResult(await apiFetch<Result>('/predict', { method: 'POST', body: JSON.stringify({ ...form, name: form.name || null }) })); } catch { setError('Unable to connect to the churn service.'); } finally { setLoading(false); } }
   const update = (key: keyof FormData, value: string) => setForm((current) => ({ ...current, [key]: key === 'name' ? value : Number(value) }));
-  return <div className="page-wrap assessment-page"><div className="assessment-hero"><div><p className="eyebrow">Intentional prediction</p><h1 className="page-title">Risk Assessment</h1><p className="page-lede">Translate customer activity into a clear churn signal, then use the explanation to choose the next best retention action.</p></div><div className="assessment-badge"><Sparkles size={16} /> Powered by the live model</div></div><div className="assessment-layout"><form onSubmit={submit} className="panel assessment-form"><SectionHeading number="01" title="Customer profile" detail="Identify the account you are assessing." /><label className="field-label wide-field"><span><UserRound size={15} /> Customer name <small>Optional</small></span><input value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="e.g. Acme Studios" /></label><SectionHeading number="02" title="Engagement & support" detail="Signals that describe how the customer uses the product." /><div className="assessment-fields">{fields.filter((field) => field.group === 'Engagement' || field.group === 'Support').map((field) => <Field key={field.key} field={field} value={form[field.key]} onChange={(value) => update(field.key, value)} />)}</div><SectionHeading number="03" title="Financial & tenure" detail="Context that helps calibrate the assessment." /><div className="assessment-fields">{fields.filter((field) => field.group === 'Financial' || field.group === 'Customer profile').map((field) => <Field key={field.key} field={field} value={form[field.key]} onChange={(value) => update(field.key, value)} />)}</div><button disabled={loading} className="button-primary assessment-submit">{loading ? <><span className="button-spinner" /> Analyzing customer signals...</> : <>Run assessment <ArrowRight size={16} /> </>}</button>{error && <p className="error-text form-error">{error}</p>}</form><ResultPanel result={result} /></div></div>;
+  
+  return <div className="page-wrap assessment-page">
+    <div className="assessment-hero">
+      <div>
+        <p className="eyebrow">Intentional prediction</p>
+        <h1 className="page-title">Risk Assessment</h1>
+        <p className="page-lede">Translate customer activity into a clear churn signal, then use the explanation to choose the next best retention action.</p>
+        
+        <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+          <button onClick={() => setActiveTab('individual')} className={`button-secondary ${activeTab === 'individual' ? 'active-tab' : ''}`} style={activeTab === 'individual' ? { background: '#101312', color: 'white' } : {}}>Individual Assessment</button>
+          <button onClick={() => setActiveTab('bulk')} className={`button-secondary ${activeTab === 'bulk' ? 'active-tab' : ''}`} style={activeTab === 'bulk' ? { background: '#101312', color: 'white' } : {}}>Bulk CSV Assessment</button>
+        </div>
+      </div>
+      <div className="assessment-badge"><Sparkles size={16} /> Powered by the live model</div>
+    </div>
+    
+    {activeTab === 'individual' ? (
+      <div className="assessment-layout"><form onSubmit={submit} className="panel assessment-form"><SectionHeading number="01" title="Customer profile" detail="Identify the account you are assessing." /><label className="field-label wide-field"><span><UserRound size={15} /> Customer name <small>Optional</small></span><input value={form.name} onChange={(event) => update('name', event.target.value)} placeholder="e.g. Acme Studios" /></label><SectionHeading number="02" title="Engagement & support" detail="Signals that describe how the customer uses the product." /><div className="assessment-fields">{fields.filter((field) => field.group === 'Engagement' || field.group === 'Support').map((field) => <Field key={field.key} field={field} value={form[field.key]} onChange={(value) => update(field.key, value)} />)}</div><SectionHeading number="03" title="Financial & tenure" detail="Context that helps calibrate the assessment." /><div className="assessment-fields">{fields.filter((field) => field.group === 'Financial' || field.group === 'Customer profile').map((field) => <Field key={field.key} field={field} value={form[field.key]} onChange={(value) => update(field.key, value)} />)}</div><button disabled={loading} className="button-primary assessment-submit">{loading ? <><span className="button-spinner" /> Analyzing customer signals...</> : <>Run assessment <ArrowRight size={16} /> </>}</button>{error && <p className="error-text form-error">{error}</p>}</form><ResultPanel result={result} /></div>
+    ) : (
+      <BulkAssessment />
+    )}
+  </div>;
 }
 
 function SectionHeading({ number, title, detail }: { number: string; title: string; detail: string }) { return <div className="form-section-heading"><span>{number}</span><div><h2>{title}</h2><p>{detail}</p></div></div>; }

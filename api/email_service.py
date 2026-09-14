@@ -2,6 +2,15 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from pathlib import Path
+
+# Explicitly load .env from project root — needed when running as Celery worker
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    load_dotenv(dotenv_path=_env_path, override=False)
+except ImportError:
+    pass
 
 def send_email(to_email: str, subject: str, body: str) -> bool:
     host = os.getenv("EMAIL_HOST")

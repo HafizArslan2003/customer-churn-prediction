@@ -133,6 +133,15 @@ try:
 except FileNotFoundError:
     model = None
 
+# Initialize shared prediction service
+try:
+    from . import prediction_service
+except ImportError:
+    import prediction_service
+
+if model is not None:
+    prediction_service.init(model, scaler, explainer, feature_means, FEATURE_NAMES, _get_retention_task_fn)
+
 
 @app.get("/")
 def serve_ui():
@@ -146,95 +155,118 @@ def predict_churn(data: CustomerData, request: Request, db: Session = Depends(ge
     if model is None:
         raise HTTPException(status_code=500, detail="Model artifacts not found.")
 
-    input_data = pd.DataFrame([[
-        data.login_frequency, data.feature_usage_count,
-        data.support_ticket_volume, data.payment_amount, data.account_age
-    ]], columns=FEATURE_NAMES)
-
-    input_scaled = scaler.transform(input_data)
-    prob = model.predict_proba(input_scaled)[0][1]
-    prediction = int(model.predict(input_scaled)[0])
-
-    shap_values = explainer.shap_values(input_scaled)
-    if isinstance(shap_values, list):
-        shap_vals_churn = shap_values[1][0]
-    elif len(shap_values.shape) == 3:
-        shap_vals_churn = shap_values[0, :, 1]
-    else:
-        shap_vals_churn = shap_values[0]
-
-    reasons = []
-    for idx in np.argsort(np.abs(shap_vals_churn))[::-1][:3]:
-        feat = FEATURE_NAMES[idx]
-        val = input_data.iloc[0, idx]
-        mean_val = feature_means[feat]
-        shap_val = shap_vals_churn[idx]
-        if abs(shap_val) < 0.01:
-            continue
-        direction = "increases" if shap_val > 0 else "decreases"
-        diff_pct = ((val - mean_val) / (mean_val + 1e-5)) * 100
-        comp = f"{abs(diff_pct):.0f}% {'above' if val > mean_val else 'below'} average"
-        reasons.append(f"{feat} is {comp} ({val:.1f} vs avg {mean_val:.1f}), which {direction} churn risk.")
-
-    level = risk_level(float(prob))
-    recommendations = recommendations_for(level)
-
-    # Save to DB
-    db_customer = models.Customer(
+    result = prediction_service.run_prediction(
         name=data.name,
+        email=None,
         login_frequency=data.login_frequency,
         feature_usage_count=data.feature_usage_count,
         support_ticket_volume=data.support_ticket_volume,
         payment_amount=data.payment_amount,
-        account_age=data.account_age
+        account_age=data.account_age,
+        db=db,
+        persist=True,
     )
-    db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
-
-    db_prediction = models.Prediction(
-        customer_id=db_customer.id,
-        churn_probability=float(prob),
-        prediction=prediction,
-        top_reasons=json.dumps(reasons)
-    )
-    db.add(db_prediction)
-
-    if level == "high":
-        existing_task = (
-            db.query(models.RetentionTask)
-            .filter(
-                models.RetentionTask.customer_id == db_customer.id,
-                models.RetentionTask.title == "Contact high-risk customer",
-                models.RetentionTask.status.in_(["pending", "in_progress"])
-            )
-            .first()
-        )
-        if not existing_task:
-            reason_summary = " ".join(reasons) if reasons else "No SHAP reasons were available."
-            new_task = models.RetentionTask(
-                customer_id=db_customer.id,
-                title="Contact high-risk customer",
-                description=f"Churn probability: {float(prob):.1%}. Main risk reasons: {reason_summary}",
-                priority="high",
-                status="pending",
-                action_type="email",
-                email_status="pending"
-            )
-            db.add(new_task)
-            db.commit()
-            db.refresh(new_task)
-            
-            # Queue Celery Task
-            try:
-                send_retention_email_task.delay(db_customer.id, new_task.id)
-            except Exception as e:
-                print(f"Failed to queue Celery task: {e}")
-                
-    db.commit()
     cache_delete("insightos:reports:summary")
 
-    return {"churn_probability": float(prob), "prediction": prediction, "risk_level": level, "top_reasons": reasons, "recommendations": recommendations}
+    return {
+        "churn_probability": result["churn_probability"],
+        "prediction": result["prediction"],
+        "risk_level": result["risk_level"],
+        "top_reasons": result["top_reasons"],
+        "recommendations": result["recommendations"],
+    }
+
+
+from fastapi import File, UploadFile
+import csv
+import io
+
+@app.post("/predict/bulk")
+async def predict_bulk(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    Bulk CSV assessment: upload a CSV with columns
+    name, email, login_frequency, feature_usage_count,
+    support_ticket_volume, payment_amount, account_age.
+    Returns per-customer prediction results with automatic retention triggering.
+    """
+    if model is None:
+        raise HTTPException(status_code=500, detail="Model artifacts not found.")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    headers = reader.fieldnames or []
+
+    # Validate required columns
+    required = set(FEATURE_NAMES)
+    missing = required - {h.strip().lower() for h in headers}
+    if missing:
+        raise HTTPException(status_code=422, detail=f"CSV missing required columns: {', '.join(sorted(missing))}. Required: name, email, {', '.join(FEATURE_NAMES)}")
+
+    results = []
+    total = 0
+    successful = 0
+    failed = 0
+    high_risk = 0
+    retention_tasks_created = 0
+    emails_queued = 0
+
+    for row_num, row in enumerate(reader, start=2):
+        total += 1
+        # Normalize keys
+        row = {k.strip().lower(): v.strip() if v else "" for k, v in row.items()}
+        try:
+            features = {}
+            for feat in FEATURE_NAMES:
+                val = row.get(feat, "")
+                if val == "":
+                    raise ValueError(f"Missing value for '{feat}'")
+                features[feat] = float(val)
+
+            result = prediction_service.run_prediction(
+                name=row.get("name") or None,
+                email=row.get("email") or None,
+                **features,
+                db=db,
+                persist=True,
+            )
+            successful += 1
+            if result["risk_level"] == "high":
+                high_risk += 1
+            if result["retention_task"]:
+                retention_tasks_created += 1
+            if result["email_status"] == "queued":
+                emails_queued += 1
+
+            results.append(result)
+        except Exception as e:
+            failed += 1
+            results.append({
+                "name": row.get("name", f"Row {row_num}"),
+                "email": row.get("email"),
+                "error": str(e),
+                "churn_probability": None,
+                "risk_level": None,
+                "top_reasons": [],
+                "retention_task": False,
+                "email_status": None,
+            })
+
+    cache_delete("insightos:reports:summary")
+
+    return {
+        "total": total,
+        "successful": successful,
+        "failed": failed,
+        "high_risk": high_risk,
+        "retention_tasks_created": retention_tasks_created,
+        "emails_queued": emails_queued,
+        "results": results,
+    }
 
 
 @app.post("/predict/what-if", response_model=PredictionResponse)

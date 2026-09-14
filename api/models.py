@@ -11,6 +11,7 @@ class Customer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=True)
+    email = Column(String, nullable=True)
     login_frequency = Column(Float)
     feature_usage_count = Column(Float)
     support_ticket_volume = Column(Float)

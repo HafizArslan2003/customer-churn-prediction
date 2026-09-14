@@ -1,0 +1,5 @@
+name,email,login_frequency,feature_usage_count,support_ticket_volume,payment_amount,account_age
+Ali,ali@example.com,3,2,8,35,120
+Ahmed,ahmed@example.com,9,7,1,70,500
+Usman,usman@example.com,2,1,10,25,80
+Hamza,hamza@example.com,6,5,3,65,450
