@@ -4,8 +4,8 @@ import Sidebar from '@/components/Sidebar';
 import AppHeader from '@/components/AppHeader';
 
 export const metadata: Metadata = {
-  title: 'InsightOS - Churn Intelligence',
-  description: 'Customer churn intelligence platform',
+  title: 'RetainIQ - Customer Retention Intelligence',
+  description: 'AI-powered customer churn prediction and retention automation platform',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

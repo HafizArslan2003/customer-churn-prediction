@@ -1,5 +1,5 @@
 """
-ChurnIQ Retention Automation — End-to-End Audit Test Script
+RetainIQ Retention Automation — End-to-End Audit Test Script
 Run with: python test_retention.py
 Requires FastAPI to be running on http://127.0.0.1:8000
 """

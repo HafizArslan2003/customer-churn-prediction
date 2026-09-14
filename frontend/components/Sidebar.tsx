@@ -43,7 +43,7 @@ export default function Sidebar() {
         </div>
 
         <span className="text-[27px] font-bold tracking-[-0.06em] text-[#101312]">
-          InsightOS
+          RetainIQ
         </span>
       </div>
 

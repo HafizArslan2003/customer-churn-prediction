@@ -44,7 +44,7 @@ except ImportError:
 # Create DB tables
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Churn Prediction API", description="Predicts SaaS customer churn probability.")
+app = FastAPI(title="RetainIQ API", description="Predicts SaaS customer churn probability and automates retention workflows.")
 
 # CORS for React/Next.js frontend
 app.add_middleware(
@@ -166,7 +166,7 @@ def predict_churn(data: CustomerData, request: Request, db: Session = Depends(ge
         db=db,
         persist=True,
     )
-    cache_delete("insightos:reports:summary")
+    cache_delete("retainiq:reports:summary")
 
     return {
         "churn_probability": result["churn_probability"],
@@ -256,7 +256,7 @@ async def predict_bulk(file: UploadFile = File(...), db: Session = Depends(get_d
                 "email_status": None,
             })
 
-    cache_delete("insightos:reports:summary")
+    cache_delete("retainiq:reports:summary")
 
     return {
         "total": total,
@@ -432,7 +432,7 @@ def update_retention_task(task_id: int, update_data: schemas.RetentionTaskUpdate
 
 @app.get("/reports/summary")
 def get_reports_summary(db: Session = Depends(get_db)):
-    cached = get_json("insightos:reports:summary")
+    cached = get_json("retainiq:reports:summary")
     if cached is not None:
         return cached
     all_preds = db.query(models.Prediction).all()
@@ -449,7 +449,7 @@ def get_reports_summary(db: Session = Depends(get_db)):
             "avg_churn_probability": 0,
             "daily_trend": []
         }
-        set_json("insightos:reports:summary", empty_summary, ttl_seconds=30)
+        set_json("retainiq:reports:summary", empty_summary, ttl_seconds=30)
         return empty_summary
 
     high_risk = sum(1 for p in all_preds if risk_level(p.churn_probability) == "high")
@@ -485,7 +485,7 @@ def get_reports_summary(db: Session = Depends(get_db)):
         "risk_distribution": {"high": high_risk, "medium": medium_risk, "low": low_risk},
         "daily_trend": daily_trend
     }
-    set_json("insightos:reports:summary", summary, ttl_seconds=30)
+    set_json("retainiq:reports:summary", summary, ttl_seconds=30)
     return summary
 
 
@@ -647,7 +647,7 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
         if not api_key:
             return {"response": fallback_response(), "data": tool_data}
         client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
-        system_prompt = """You are InsightOS AI, a professional customer churn intelligence assistant. Answer in concise, natural English plain text. Use only the live tool data supplied below for numbers, customers, predictions, and model metrics. Never invent missing values. Never use Markdown tables, JSON, asterisks, hash headings, pipe characters, or code formatting. Use short paragraphs or simple sentences. Explain ML features and SHAP reasons in plain business language. If the live customer search has no matches, say clearly that no matching customer was found."""
+        system_prompt = """You are RetainIQ AI, a professional customer churn intelligence assistant. Answer in concise, natural English plain text. Use only the live tool data supplied below for numbers, customers, predictions, and model metrics. Never invent missing values. Never use Markdown tables, JSON, asterisks, hash headings, pipe characters, or code formatting. Use short paragraphs or simple sentences. Explain ML features and SHAP reasons in plain business language. If the live customer search has no matches, say clearly that no matching customer was found."""
         response = client.chat.completions.create(
             model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Live data:\n{json.dumps(tool_data, default=str)}\n\nQuestion: {question}"}],

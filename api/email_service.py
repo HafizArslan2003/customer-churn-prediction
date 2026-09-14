@@ -12,19 +12,16 @@ try:
 except ImportError:
     pass
 
-def send_email(to_email: str, subject: str, body: str) -> bool:
+def send_email(to_email: str, subject: str, body: str) -> str:
     host = os.getenv("EMAIL_HOST")
     port = int(os.getenv("EMAIL_PORT", "587"))
     username = os.getenv("EMAIL_USERNAME")
     password = os.getenv("EMAIL_PASSWORD")
-    from_email = os.getenv("EMAIL_FROM", "noreply@churniq.com")
+    from_email = os.getenv("EMAIL_FROM", "noreply@retainiq.com")
     use_tls = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
 
     if not host or not username or not password:
-        # Fallback for dev mode
-        print(f"[Email Service] Would send email to {to_email}: {subject}")
-        print(body)
-        return True
+        return "not_configured"
 
     try:
         msg = MIMEMultipart()
@@ -39,7 +36,7 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
         server.login(username, password)
         server.send_message(msg)
         server.quit()
-        return True
+        return "sent"
     except Exception as e:
         print(f"Failed to send email: {e}")
-        return False
+        return "failed"

@@ -67,7 +67,7 @@ def rate_limit(scope: str, limit: int, window_seconds: int) -> bool:
     if not redis:
         return True
     bucket = int(time.time() // window_seconds)
-    key = f"insightos:rate:{scope}:{bucket}"
+    key = f"retainiq:rate:{scope}:{bucket}"
     try:
         count = redis.incr(key)
         if count == 1:

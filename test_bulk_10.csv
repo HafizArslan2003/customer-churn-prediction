@@ -1,0 +1,11 @@
+name,email,login_frequency,feature_usage_count,support_ticket_volume,payment_amount,account_age
+Alice LowRisk,alice@example.com,8,5,0,50,400
+Bob LowRisk,bob@example.com,9,6,1,45,600
+Charlie LowRisk,charlie@example.com,7,4,0,60,350
+Dave MediumRisk,dave@example.com,5,3,3,75,200
+Eve MediumRisk,,4,2,4,80,180
+Frank MediumRisk,frank@example.com,3,2,5,90,150
+Grace HighRisk,grace@example.com,1,1,10,120,50
+Henry HighRisk,,0,0,15,150,20
+Isabel HighRisk,isabel@example.com,2,1,12,130,30
+Jack HighRisk,jack@example.com,0,0,20,180,10

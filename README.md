@@ -1,4 +1,4 @@
-# ChurnIQ — SaaS Customer Churn Prediction Dashboard
+# RetainIQ — AI-Powered Customer Retention Intelligence
 
 A full-stack mini SaaS product that predicts which SaaS customers are likely to cancel their subscription in the next 30 days, with a modern dashboard UI, AI voice assistant, and historical reporting.
 

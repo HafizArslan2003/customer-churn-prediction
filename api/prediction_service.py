@@ -150,8 +150,16 @@ def run_prediction(
             )
             .first()
         )
+        
+        target_task = None
         if not existing_task:
             reason_summary = " ".join(reasons) if reasons else "No SHAP reasons were available."
+            
+            # Determine initial email status
+            initial_email_status = "pending"
+            if not email or not email.strip():
+                initial_email_status = "missing_recipient"
+                
             new_task = models.RetentionTask(
                 customer_id=db_customer.id,
                 title="Contact high-risk customer",
@@ -159,23 +167,41 @@ def run_prediction(
                 priority="high",
                 status="pending",
                 action_type="email",
-                email_status="pending",
+                email_status=initial_email_status,
             )
             db.add(new_task)
             db.commit()
             db.refresh(new_task)
-
+            target_task = new_task
             result["retention_task"] = True
-            result["email_status"] = "queued"
+            result["email_status"] = initial_email_status
+        else:
+            target_task = existing_task
+            result["retention_task"] = True
+            result["email_status"] = existing_task.email_status
+            
+            # Update email if missing previously and provided now
+            if email and email.strip() and target_task.email_status == "missing_recipient":
+                target_task.email_status = "pending"
+                result["email_status"] = "pending"
+                db.commit()
 
-            # Queue Celery
+        # Safely retry email if it's pending or previously failed
+        if target_task and target_task.email_status in ["pending", "failed", "queue_failed", "not_configured"]:
             try:
                 celery_fn = _get_celery_fn() if _get_celery_fn else None
                 if celery_fn is not None:
-                    celery_fn.delay(db_customer.id, new_task.id)
+                    celery_fn.delay(db_customer.id, target_task.id)
+                    target_task.email_status = "queued"
+                    result["email_status"] = "queued"
+                else:
+                    target_task.email_status = "queue_failed"
+                    result["email_status"] = "queue_failed"
             except Exception as e:
                 print(f"[prediction_service] Failed to queue Celery task: {e}")
+                target_task.email_status = "queue_failed"
                 result["email_status"] = "queue_failed"
+            db.commit()
 
     db.commit()
     return result
