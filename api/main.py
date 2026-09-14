@@ -157,7 +157,7 @@ def predict_churn(data: CustomerData, request: Request, db: Session = Depends(ge
 
     result = prediction_service.run_prediction(
         name=data.name,
-        email=None,
+        email=data.email,
         login_frequency=data.login_frequency,
         feature_usage_count=data.feature_usage_count,
         support_ticket_volume=data.support_ticket_volume,
@@ -174,6 +174,8 @@ def predict_churn(data: CustomerData, request: Request, db: Session = Depends(ge
         "risk_level": result["risk_level"],
         "top_reasons": result["top_reasons"],
         "recommendations": result["recommendations"],
+        "retention_task": result.get("retention_task", False),
+        "email_status": result.get("email_status"),
     }
 
 

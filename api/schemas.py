@@ -29,6 +29,7 @@ class RetentionTaskOut(BaseModel):
 
 class CustomerData(BaseModel):
     name: Optional[str] = None
+    email: Optional[str] = None
     login_frequency: float
     feature_usage_count: float
     support_ticket_volume: float
@@ -41,6 +42,8 @@ class PredictionResponse(BaseModel):
     risk_level: str
     top_reasons: List[str]
     recommendations: List[str] = []
+    retention_task: Optional[bool] = None
+    email_status: Optional[str] = None
 
 class ChatRequest(BaseModel):
     question: str

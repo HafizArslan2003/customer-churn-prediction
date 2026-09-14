@@ -80,7 +80,8 @@ def _build_email_body(customer_name: str, reasons_text: str) -> str:
 def send_retention_email_task(self, customer_id: int, task_id: int):
     """
     Celery task: send a personalised retention email to a high-risk customer.
-    Safe to retry on transient failures; marks email_status="failed" on permanent failure.
+    Safe to retry on transient SMTP failures.
+    Marks email_status='failed' after max retries are exhausted.
     """
     db = SessionLocal()
     try:
@@ -96,7 +97,7 @@ def send_retention_email_task(self, customer_id: int, task_id: int):
             db.commit()
             return "customer_not_found"
 
-        # Already processed — do not re-send
+        # Already successfully sent — do not re-send
         if task.email_status == "sent":
             return "already_sent"
 
@@ -105,41 +106,66 @@ def send_retention_email_task(self, customer_id: int, task_id: int):
 
         # Email destination: use RETENTION_TEST_EMAIL override for testing,
         # otherwise use the customer's real email.
-        test_email = os.environ.get("RETENTION_TEST_EMAIL")
+        test_email = os.environ.get("RETENTION_TEST_EMAIL", "").strip()
         if test_email:
             to_email = test_email
             logger.info("Test override: Sending to %s instead of customer email", to_email)
         elif customer.email and customer.email.strip():
-            to_email = customer.email
-            logger.info("Destination: customer email %s", to_email)
+            to_email = customer.email.strip()
+            logger.info("Destination: customer email for customer id=%s", customer_id)
         else:
             task.email_status = "missing_recipient"
             db.commit()
-            logger.warning("No email for customer %s, marking as missing_recipient", customer_id)
+            logger.warning("No email for customer %s — marking as missing_recipient", customer_id)
             return "missing_recipient"
 
         status_result = send_email(to_email, subject, body)
         task.email_status = status_result
         db.commit()
 
-        logger.info("Retention email for customer %s → %s", customer_id, task.email_status)
-        return task.email_status
+        logger.info("Retention email for customer %s -> %s", customer_id, status_result)
+
+        # Raise so Celery retries if delivery failed or SMTP not configured
+        if status_result in ("failed", "not_configured"):
+            raise RuntimeError(f"Email delivery returned status '{status_result}' — will retry")
+
+        return status_result
+
+    except self.MaxRetriesExceededError:
+        # Final failure — mark as failed in a fresh session to avoid stale state
+        logger.error("Max retries exceeded for task %s — marking as failed", task_id)
+        db.close()
+        fresh_db = SessionLocal()
+        try:
+            t = fresh_db.query(RetentionTask).filter(RetentionTask.id == task_id).first()
+            if t and t.email_status not in ("sent",):
+                t.email_status = "failed"
+                fresh_db.commit()
+        finally:
+            fresh_db.close()
+        return "failed"
 
     except Exception as exc:
         db.rollback()
         logger.exception("Error in send_retention_email_task for task %s: %s", task_id, exc)
 
-        # Try to mark the task as failed before retrying
+        # Try to mark the task as retrying in a fresh session
+        db.close()
+        fresh_db = SessionLocal()
         try:
-            _task = db.query(RetentionTask).filter(RetentionTask.id == task_id).first()
-            if _task and _task.email_status not in ("sent",):
-                _task.email_status = "failed"
-                db.commit()
+            t = fresh_db.query(RetentionTask).filter(RetentionTask.id == task_id).first()
+            if t and t.email_status not in ("sent",):
+                t.email_status = "queued"  # still queued — retry pending
+                fresh_db.commit()
         except Exception:
             pass
+        finally:
+            fresh_db.close()
 
-        # Retry up to max_retries times on transient errors
         raise self.retry(exc=exc)
 
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass

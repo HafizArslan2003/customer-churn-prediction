@@ -2,12 +2,19 @@
 Shared ML prediction logic used by both /predict and /predict/bulk.
 Keeps all model inference, SHAP explanation, DB saving, and retention
 triggering in one place so there is exactly ONE copy of the logic.
+
+Customer identity rules:
+  - If email is provided -> look up existing customer by email; update if found.
+  - If no email -> always create a new record (anonymous prediction).
 """
 
 import json
+import logging
 import numpy as np
 import pandas as pd
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 try:
     from . import models
@@ -44,10 +51,69 @@ def recommendations_for(level: str) -> list[str]:
     return ["Continue regular engagement", "Invite the customer to explore more features"]
 
 
+def _get_or_create_customer(
+    db: Session,
+    name,
+    email,
+    login_frequency: float,
+    feature_usage_count: float,
+    support_ticket_volume: float,
+    payment_amount: float,
+    account_age: float,
+) -> "models.Customer":
+    """
+    Find existing customer by email (if provided) and update their activity fields.
+    If no customer with that email exists, create a new one.
+    If no email is provided, always create a new anonymous record.
+
+    This prevents customer table from growing every time the same CSV is uploaded.
+    """
+    clean_email = email.strip() if email and email.strip() else None
+
+    if clean_email:
+        existing = (
+            db.query(models.Customer)
+            .filter(models.Customer.email == clean_email)
+            .first()
+        )
+        if existing:
+            # Update mutable fields so the record stays current
+            if name:
+                existing.name = name
+            existing.login_frequency = login_frequency
+            existing.feature_usage_count = feature_usage_count
+            existing.support_ticket_volume = support_ticket_volume
+            existing.payment_amount = payment_amount
+            existing.account_age = account_age
+            db.commit()
+            db.refresh(existing)
+            logger.info("Reusing existing customer id=%s email=%s", existing.id, clean_email)
+            return existing
+
+    # No email provided OR no matching customer found -> create new
+    customer = models.Customer(
+        name=name,
+        email=clean_email,
+        login_frequency=login_frequency,
+        feature_usage_count=feature_usage_count,
+        support_ticket_volume=support_ticket_volume,
+        payment_amount=payment_amount,
+        account_age=account_age,
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    if clean_email:
+        logger.info("Created new customer id=%s email=%s", customer.id, clean_email)
+    else:
+        logger.info("Created anonymous customer id=%s (no email)", customer.id)
+    return customer
+
+
 def run_prediction(
     *,
-    name: str | None,
-    email: str | None,
+    name,
+    email,
     login_frequency: float,
     feature_usage_count: float,
     support_ticket_volume: float,
@@ -59,8 +125,8 @@ def run_prediction(
     """
     Run the full ML prediction pipeline for one customer.
 
-    If persist=True: saves Customer, Prediction, and (if high-risk) RetentionTask
-    to the DB and queues a Celery email job.
+    If persist=True: saves Customer (deduped by email), Prediction, and
+    (if high-risk) RetentionTask to the DB and queues a Celery email job.
 
     Returns a dict with all prediction info + retention metadata.
     """
@@ -116,8 +182,9 @@ def run_prediction(
     if not persist:
         return result
 
-    # ── Save Customer ────────────────────────────────────────────
-    db_customer = models.Customer(
+    # -- Save Customer (deduped by email) -------------------------
+    db_customer = _get_or_create_customer(
+        db=db,
         name=name,
         email=email,
         login_frequency=login_frequency,
@@ -126,11 +193,8 @@ def run_prediction(
         payment_amount=payment_amount,
         account_age=account_age,
     )
-    db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
 
-    # ── Save Prediction ──────────────────────────────────────────
+    # -- Save Prediction ------------------------------------------
     db_prediction = models.Prediction(
         customer_id=db_customer.id,
         churn_probability=prob,
@@ -138,8 +202,9 @@ def run_prediction(
         top_reasons=json.dumps(reasons),
     )
     db.add(db_prediction)
+    db.commit()
 
-    # ── Retention trigger (>= 70%) ───────────────────────────────
+    # -- Retention trigger (>= 70%) -------------------------------
     if level == "high":
         existing_task = (
             db.query(models.RetentionTask)
@@ -150,16 +215,14 @@ def run_prediction(
             )
             .first()
         )
-        
+
         target_task = None
         if not existing_task:
             reason_summary = " ".join(reasons) if reasons else "No SHAP reasons were available."
-            
-            # Determine initial email status
-            initial_email_status = "pending"
-            if not email or not email.strip():
-                initial_email_status = "missing_recipient"
-                
+
+            clean_email = email.strip() if email and email.strip() else None
+            initial_email_status = "pending" if clean_email else "missing_recipient"
+
             new_task = models.RetentionTask(
                 customer_id=db_customer.id,
                 title="Contact high-risk customer",
@@ -179,29 +242,37 @@ def run_prediction(
             target_task = existing_task
             result["retention_task"] = True
             result["email_status"] = existing_task.email_status
-            
-            # Update email if missing previously and provided now
-            if email and email.strip() and target_task.email_status == "missing_recipient":
+
+            # If we now have an email but previously did not, allow retry
+            clean_email = email.strip() if email and email.strip() else None
+            if clean_email and target_task.email_status == "missing_recipient":
                 target_task.email_status = "pending"
                 result["email_status"] = "pending"
                 db.commit()
 
-        # Safely retry email if it's pending or previously failed
-        if target_task and target_task.email_status in ["pending", "failed", "queue_failed", "not_configured"]:
+        # Queue email if status warrants it
+        retryable = {"pending", "failed", "queue_failed", "not_configured"}
+        if target_task and target_task.email_status in retryable:
             try:
                 celery_fn = _get_celery_fn() if _get_celery_fn else None
                 if celery_fn is not None:
                     celery_fn.delay(db_customer.id, target_task.id)
                     target_task.email_status = "queued"
                     result["email_status"] = "queued"
+                    logger.info(
+                        "Queued retention email task for customer id=%s task id=%s",
+                        db_customer.id, target_task.id,
+                    )
                 else:
                     target_task.email_status = "queue_failed"
                     result["email_status"] = "queue_failed"
+                    logger.warning(
+                        "Celery unavailable -- could not queue email for customer %s", db_customer.id
+                    )
             except Exception as e:
-                print(f"[prediction_service] Failed to queue Celery task: {e}")
+                logger.error("Failed to queue Celery task: %s", e)
                 target_task.email_status = "queue_failed"
                 result["email_status"] = "queue_failed"
             db.commit()
 
-    db.commit()
     return result
